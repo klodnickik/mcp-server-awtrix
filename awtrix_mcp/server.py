@@ -87,7 +87,7 @@ def build_server(settings: AwtrixSettings | None = None) -> MCPServer:
 
     @server.tool(annotations=ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=True))
     async def awtrix_get_device_state(ctx: Context) -> dict[str, Any]:
-        """Return current AWTRIX hardware metrics: battery, lux, temperature, active app."""
+        """Return current AWTRIX hardware metrics: battery, lux, temperature, active app (if available)."""
         stats = await ctx.request_context.lifespan_context.client.get_stats()
         return stats.model_dump(exclude_none=True)
 
@@ -139,13 +139,19 @@ def build_server(settings: AwtrixSettings | None = None) -> MCPServer:
     return server
 
 
+def _transport_type(value: str) -> str:
+    if value not in ("stdio", "sse"):
+        raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from 'stdio', 'sse')")
+    return value
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="mcp-server-awtrix")
     parser.add_argument(
-        "--transport", choices=["stdio", "sse"], default=os.environ.get("MCP_TRANSPORT", "stdio")
+        "--transport", type=_transport_type, default=os.environ.get("MCP_TRANSPORT", "stdio")
     )
     parser.add_argument("--host", default=os.environ.get("MCP_HOST", "127.0.0.1"))
-    parser.add_argument("--port", type=int, default=int(os.environ.get("MCP_PORT", "8000")))
+    parser.add_argument("--port", type=int, default=os.environ.get("MCP_PORT", "8000"))
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)

@@ -1,12 +1,14 @@
 """Integration tests for the AWTRIX MCP tools, via the in-process MCP Client."""
 
+from unittest.mock import MagicMock
+
 import httpx
 import pytest
 import respx
 from mcp import Client
 
 from awtrix_mcp.config import AwtrixSettings
-from awtrix_mcp.server import build_server
+from awtrix_mcp.server import build_server, main
 
 BASE_URL = "http://awtrix.local"
 
@@ -71,6 +73,18 @@ async def test_awtrix_upsert_app_posts_to_named_route(server):
 
 
 @pytest.mark.asyncio
+async def test_awtrix_upsert_app_surfaces_connection_error(server):
+    async with respx.mock:
+        respx.post(f"{BASE_URL}/api/custom", params={"name": "clock"}).mock(
+            side_effect=httpx.ConnectError("refused")
+        )
+        async with Client(server) as client:
+            result = await client.call_tool("awtrix_upsert_app", {"name": "clock", "text": "hi"})
+        assert result.is_error
+        assert "refused" in result.content[0].text
+
+
+@pytest.mark.asyncio
 async def test_awtrix_delete_app_sends_empty_body(server):
     async with respx.mock:
         route = respx.post(f"{BASE_URL}/api/custom", params={"name": "app_users"}).mock(
@@ -84,6 +98,18 @@ async def test_awtrix_delete_app_sends_empty_body(server):
 
 
 @pytest.mark.asyncio
+async def test_awtrix_delete_app_surfaces_connection_error(server):
+    async with respx.mock:
+        respx.post(f"{BASE_URL}/api/custom", params={"name": "app_users"}).mock(
+            side_effect=httpx.ConnectError("refused")
+        )
+        async with Client(server) as client:
+            result = await client.call_tool("awtrix_delete_app", {"name": "app_users"})
+        assert result.is_error
+        assert "refused" in result.content[0].text
+
+
+@pytest.mark.asyncio
 async def test_awtrix_get_device_state_returns_parsed_stats(server):
     async with respx.mock:
         respx.get(f"{BASE_URL}/api/stats").mock(
@@ -93,6 +119,17 @@ async def test_awtrix_get_device_state_returns_parsed_stats(server):
             result = await client.call_tool("awtrix_get_device_state", {})
         assert result.structured_content["battery"] == 97
         assert result.structured_content["ram_free"] == 152948
+
+
+@pytest.mark.asyncio
+async def test_awtrix_get_device_state_surfaces_malformed_response(server):
+    async with respx.mock:
+        respx.get(f"{BASE_URL}/api/stats").mock(
+            return_value=httpx.Response(200, json={"unexpected": "shape"})
+        )
+        async with Client(server) as client:
+            result = await client.call_tool("awtrix_get_device_state", {})
+        assert result.is_error
 
 
 @pytest.mark.asyncio
@@ -122,6 +159,26 @@ async def test_awtrix_set_settings_no_args_makes_no_http_calls(server):
 
 
 @pytest.mark.asyncio
+async def test_awtrix_set_settings_transitions_only(server):
+    async with respx.mock:
+        route = respx.post(f"{BASE_URL}/api/settings").mock(return_value=httpx.Response(200))
+        async with Client(server, raise_exceptions=True) as client:
+            result = await client.call_tool("awtrix_set_settings", {"transitions": False})
+        assert route.calls.last.request.content == b'{"ATRANS":false}'
+        assert result.structured_content["settings"] == {"ATRANS": False}
+
+
+@pytest.mark.asyncio
+async def test_awtrix_set_settings_surfaces_connection_error(server):
+    async with respx.mock:
+        respx.post(f"{BASE_URL}/api/settings").mock(side_effect=httpx.ConnectError("refused"))
+        async with Client(server) as client:
+            result = await client.call_tool("awtrix_set_settings", {"brightness": 50})
+        assert result.is_error
+        assert "refused" in result.content[0].text
+
+
+@pytest.mark.asyncio
 async def test_awtrix_test_render_valid_payload_makes_no_http_calls(server):
     async with respx.mock:
         notify_route = respx.post(f"{BASE_URL}/api/notify")
@@ -148,3 +205,31 @@ async def test_awtrix_test_render_invalid_color_returns_errors(server):
         )
     assert result.is_error
     assert "color" in result.content[0].text
+
+
+@pytest.mark.asyncio
+async def test_awtrix_test_render_defaults_to_app_kind(server):
+    async with Client(server, raise_exceptions=True) as client:
+        result = await client.call_tool("awtrix_test_render", {"text": "hi", "rainbow": True})
+    assert result.structured_content["valid"] is True
+    assert result.structured_content["kind"] == "app"
+    assert result.structured_content["payload"]["rainbow"] is True
+
+
+def test_main_defaults_to_stdio_transport(monkeypatch):
+    mock_server = MagicMock()
+    monkeypatch.setattr("awtrix_mcp.server.build_server", lambda: mock_server)
+    monkeypatch.setattr("sys.argv", ["mcp-server-awtrix"])
+    main()
+    mock_server.run.assert_called_once_with("stdio")
+
+
+def test_main_sse_transport_passes_host_and_port(monkeypatch):
+    mock_server = MagicMock()
+    monkeypatch.setattr("awtrix_mcp.server.build_server", lambda: mock_server)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["mcp-server-awtrix", "--transport", "sse", "--host", "0.0.0.0", "--port", "9000"],
+    )
+    main()
+    mock_server.run.assert_called_once_with("sse", host="0.0.0.0", port=9000)

@@ -343,6 +343,11 @@ pip install -e .
 python -m awtrix_mcp
 ```
 
+Or over SSE (HTTP), for clients that connect remotely:
+```bash
+uv run mcp-server-awtrix --transport sse --host 0.0.0.0 --port 8000
+```
+
 ### Running Tests
 
 ```bash
