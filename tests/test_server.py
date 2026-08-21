@@ -233,3 +233,13 @@ def test_main_sse_transport_passes_host_and_port(monkeypatch):
     )
     main()
     mock_server.run.assert_called_once_with("sse", host="0.0.0.0", port=9000)
+
+
+def test_main_rejects_invalid_transport_from_env(monkeypatch, capsys):
+    monkeypatch.setattr("awtrix_mcp.server.build_server", MagicMock())
+    monkeypatch.setattr("sys.argv", ["mcp-server-awtrix"])
+    monkeypatch.setenv("MCP_TRANSPORT", "bogus")
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 2
+    assert "invalid choice: 'bogus'" in capsys.readouterr().err
