@@ -1,0 +1,47 @@
+services:
+  # 1. MCP Server over SSE (for AI agents connecting via HTTP/SSE)
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: awtrix-mcp-server
+    restart: unless-stopped
+    command: ["python", "-m", "awtrix_mcp.server", "--transport", "sse", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "${MCP_PORT:-8000}:8000"
+    environment:
+      - AWTRIX_BASE_URL=${AWTRIX_BASE_URL:-http://awtrix3.local}
+      - APPS_DIR=/app/apps
+      - CHECKLY_API_KEY=${CHECKLY_API_KEY:-}
+      - CHECKLY_ACCOUNT_ID=${CHECKLY_ACCOUNT_ID:-}
+      - SAAS_METRICS_API_SECRET=${SAAS_METRICS_API_SECRET:-}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./apps:/app/apps:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()\" || exit 0"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # 2. Declarative Metric Poller Daemon (runs 24/7 in background polling apps/*.yaml)
+  metric-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: awtrix-metric-daemon
+    restart: unless-stopped
+    command: ["python", "-m", "awtrix_mcp.daemon", "--apps-dir", "/app/apps"]
+    environment:
+      - AWTRIX_BASE_URL=${AWTRIX_BASE_URL:-http://awtrix3.local}
+      - APPS_DIR=/app/apps
+      - CHECKLY_API_KEY=${CHECKLY_API_KEY:-}
+      - CHECKLY_ACCOUNT_ID=${CHECKLY_ACCOUNT_ID:-}
+      - SAAS_METRICS_API_SECRET=${SAAS_METRICS_API_SECRET:-}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./apps:/app/apps

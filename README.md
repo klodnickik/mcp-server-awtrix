@@ -343,10 +343,26 @@ pip install -e .
 python -m awtrix_mcp
 ```
 
-Run in standalone Daemon mode (runs declarative background polling without an AI agent):
+### Docker & Docker Compose Setup
+
+Run using Docker Compose:
+
 ```bash
-python -m awtrix_mcp.daemon --apps-dir ./apps
+# 1. Clone & prepare environment
+git clone https://github.com/klodnickik/mcp-server-awtrix.git
+cd mcp-server-awtrix
+cp .env.example .env
+
+# 2. Start the MCP Server (SSE on port 8000) and Metric Daemon
+docker compose up -d
+
+# Or start only the metric poller daemon:
+docker compose up -d metric-daemon
+
+# View live logs:
+docker compose logs -f
 ```
+
 
 ### MCP Client Configuration
 
