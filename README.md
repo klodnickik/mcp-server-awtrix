@@ -343,6 +343,11 @@ pip install -e .
 python -m awtrix_mcp
 ```
 
+Or over SSE (HTTP), for clients that connect remotely:
+```bash
+uv run mcp-server-awtrix --transport sse --host 0.0.0.0 --port 8000
+```
+
 ### Running Tests
 
 ```bash
@@ -417,7 +422,7 @@ In Cursor Settings $\rightarrow$ Features $\rightarrow$ MCP Servers $\rightarrow
 
 - [x] Core MCP Tools specification and design
 - [x] Declarative YAML orchestration schema
-- [ ] FastMCP implementation with async HTTP client
+- [x] MCPServer (mcp v2) implementation with async HTTP client
 - [ ] Live visual web preview for matrix pixel art
 - [ ] MQTT Transport layer support (optional alternative to REST)
 - [ ] Home Assistant service discovery export
