@@ -22,7 +22,9 @@ async def test_send_app_posts_expected_payload():
         async with AwtrixClient(base_url=BASE_URL) as client:
             await client.send_app("clock", AppPayload(text="hi"))
         assert route.called
-        assert route.calls.last.request.content == b'{"text":"hi","duration":5,"repeat":-1,"rainbow":false,"save":false}'
+        assert route.calls.last.request.content == (
+            b'{"text":"hi","duration":5,"repeat":-1,"rainbow":false,"save":false}'
+        )
 
 
 @pytest.mark.asyncio
