@@ -98,3 +98,18 @@ def test_device_settings_alias_mapping():
         "MATP": True,
         "ATRANS": False,
     }
+
+
+def test_device_settings_partial_update_omits_unset_fields():
+    settings = DeviceSettings(brightness=80, power=True)
+    assert settings.transitions is None
+    assert settings.model_dump(by_alias=True, exclude_none=True) == {
+        "BRI": 80,
+        "MATP": True,
+    }
+
+
+def test_app_payload_lifetime_mode_serializes_to_wire_alias():
+    payload = AppPayload(text="hi", lifetime_mode=1)
+    dumped = payload.model_dump(by_alias=True, exclude_none=True)
+    assert dumped["lifetimeMode"] == 1

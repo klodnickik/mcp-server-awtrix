@@ -1,10 +1,14 @@
 """Async HTTP client for the AWTRIX 3 device REST API."""
 
 import asyncio
+import logging
 
 import httpx
+from pydantic import ValidationError
 
 from .models import AppPayload, DeviceSettings, DeviceStats, NotificationPayload
+
+logger = logging.getLogger(__name__)
 
 
 class AwtrixError(Exception):
@@ -12,15 +16,16 @@ class AwtrixError(Exception):
 
 
 class AwtrixConnectionError(AwtrixError):
-    """Raised when the device cannot be reached (transport-level failure)."""
+    """Raised when the device cannot be reached (transport-level failure). Retried."""
 
 
 class AwtrixTimeoutError(AwtrixError):
-    """Raised when a request to the device times out."""
+    """Raised when a request to the device times out. Retried."""
 
 
 class AwtrixResponseError(AwtrixError):
-    """Raised when the device returns a non-2xx HTTP response."""
+    """Raised when the device returns a non-2xx HTTP response, or an unparseable
+    body from a 2xx response. Not retried."""
 
 
 class AwtrixClient:
@@ -33,6 +38,10 @@ class AwtrixClient:
         max_retries: int = 3,
         backoff_factor: float = 0.5,
     ) -> None:
+        """
+        max_retries is the total number of attempts (including the first),
+        not the number of retries after the first. max_retries=1 means no retries.
+        """
         self._max_retries = max_retries
         self._backoff_factor = backoff_factor
         self._http = httpx.AsyncClient(
@@ -59,14 +68,26 @@ class AwtrixClient:
                 return response
             except httpx.TimeoutException as exc:
                 if attempt >= self._max_retries - 1:
+                    logger.warning(
+                        "%s %s timed out after %d attempt(s): %s", method, url, attempt + 1, exc
+                    )
                     raise AwtrixTimeoutError(str(exc)) from exc
+                logger.debug(
+                    "%s %s timed out (attempt %d), retrying: %s", method, url, attempt + 1, exc
+                )
             except httpx.HTTPStatusError as exc:
                 raise AwtrixResponseError(
                     f"{exc.response.status_code} from {exc.request.url}: {exc.response.text}"
                 ) from exc
             except httpx.RequestError as exc:
                 if attempt >= self._max_retries - 1:
+                    logger.warning(
+                        "%s %s failed after %d attempt(s): %s", method, url, attempt + 1, exc
+                    )
                     raise AwtrixConnectionError(str(exc)) from exc
+                logger.debug(
+                    "%s %s failed (attempt %d), retrying: %s", method, url, attempt + 1, exc
+                )
 
             await asyncio.sleep(self._backoff_factor * 2**attempt)
             attempt += 1
@@ -89,7 +110,11 @@ class AwtrixClient:
 
     async def get_stats(self) -> DeviceStats:
         response = await self._request("GET", "/api/stats")
-        return DeviceStats.model_validate(response.json())
+        try:
+            return DeviceStats.model_validate(response.json())
+        except (ValueError, ValidationError) as exc:
+            # response.json() raises json.JSONDecodeError, a ValueError subclass
+            raise AwtrixResponseError(f"Malformed response from /api/stats: {exc}") from exc
 
     async def set_settings(self, settings: DeviceSettings) -> None:
         await self._request(

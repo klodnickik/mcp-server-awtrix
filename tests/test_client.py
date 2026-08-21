@@ -44,6 +44,10 @@ async def test_send_notification_posts_expected_payload():
         async with AwtrixClient(base_url=BASE_URL) as client:
             await client.send_notification(NotificationPayload(text="Build Failed", color="FF0000"))
         assert route.called
+        assert route.calls.last.request.content == (
+            b'{"text":"Build Failed","color":"FF0000","hold":false,"duration":5,'
+            b'"wakeup":false,"stack":true}'
+        )
 
 
 @pytest.mark.asyncio
@@ -109,6 +113,16 @@ async def test_http_status_error_raises_awtrix_response_error():
 
 
 @pytest.mark.asyncio
+async def test_http_status_error_does_not_retry():
+    async with respx.mock:
+        route = respx.get(f"{BASE_URL}/api/stats").mock(return_value=httpx.Response(500))
+        async with AwtrixClient(base_url=BASE_URL, max_retries=3, backoff_factor=0.01) as client:
+            with pytest.raises(AwtrixResponseError):
+                await client.get_stats()
+        assert route.call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_connect_error_raises_awtrix_connection_error():
     async with respx.mock:
         respx.get(f"{BASE_URL}/api/stats").mock(side_effect=httpx.ConnectError("refused"))
@@ -141,3 +155,25 @@ async def test_retry_exhausted_raises_awtrix_timeout_error():
             with pytest.raises(AwtrixTimeoutError):
                 await client.get_stats()
         assert route.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_get_stats_malformed_json_raises_awtrix_response_error():
+    async with respx.mock:
+        respx.get(f"{BASE_URL}/api/stats").mock(
+            return_value=httpx.Response(200, content="not json", headers={"Content-Type": "text/plain"})
+        )
+        async with AwtrixClient(base_url=BASE_URL) as client:
+            with pytest.raises(AwtrixResponseError):
+                await client.get_stats()
+
+
+@pytest.mark.asyncio
+async def test_get_stats_missing_required_field_raises_awtrix_response_error():
+    async with respx.mock:
+        respx.get(f"{BASE_URL}/api/stats").mock(
+            return_value=httpx.Response(200, json={"lux": "8", "temp": "25", "ram": 152948})
+        )
+        async with AwtrixClient(base_url=BASE_URL) as client:
+            with pytest.raises(AwtrixResponseError):
+                await client.get_stats()
