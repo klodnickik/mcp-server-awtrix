@@ -30,7 +30,7 @@ def build_server(settings: AwtrixSettings | None = None) -> MCPServer:
     resolved_settings = settings or AwtrixSettings()
 
     @asynccontextmanager
-    async def app_lifespan(server: MCPServer) -> AsyncIterator[AppContext]:
+    async def app_lifespan(_server: MCPServer) -> AsyncIterator[AppContext]:
         async with AwtrixClient(base_url=resolved_settings.base_url) as client:
             yield AppContext(client=client)
 

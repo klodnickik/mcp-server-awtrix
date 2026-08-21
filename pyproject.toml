@@ -59,13 +59,40 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["awtrix_mcp"]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "respx>=0.21.0",
+    "pylint>=3.0.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "respx>=0.21.0",
+    "pylint>=3.0.0",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.pylint.main]
+py-version = "3.10"
+
+[tool.pylint.messages_control]
+disable = [
+    "too-few-public-methods",        # R0903: Pydantic models / settings / AppContext
+    "too-many-arguments",            # R0913: MCP tool definitions have many parameters by design
+    "too-many-positional-arguments", # R0917: MCP tool definitions
+    "redefined-outer-name",          # W0621: Pytest fixtures
+    "missing-function-docstring",    # C0116: Test functions
+    "missing-class-docstring",       # C0115: Data models
+    "missing-module-docstring",      # C0114: Test modules
+]
+
+[tool.pylint.format]
+max-line-length = 120
+
