@@ -1,0 +1,36 @@
+app_id: "checkly"
+name: "checkly_status"
+enabled: true
+interval_seconds: 60
+
+source:
+  type: "http"
+  url: "https://api.checklyhq.com/v1/checks"
+  headers:
+    Authorization: "Bearer ${CHECKLY_API_KEY}"
+    X-Checkly-Account: "${CHECKLY_ACCOUNT_ID}"
+
+transform:
+  total: "len(data)"
+  failures: "sum(1 for c in data if c.get('hasFailures'))"
+  degraded: "sum(1 for c in data if c.get('isDegraded') and not c.get('hasFailures'))"
+
+display:
+  - condition: "failures > 0"
+    icon: "10558"
+    notify: true
+    text:
+      - { text: "FAIL ", color: "FF0000" }
+      - { text: "({{failures}}/{{total}})", color: "FFFFFF" }
+
+  - condition: "degraded > 0"
+    icon: "10558"
+    text:
+      - { text: "WARN ", color: "FFA500" }
+      - { text: "({{degraded}}/{{total}})", color: "FFFFFF" }
+
+  - condition: "default"
+    icon: "483"
+    text:
+      - { text: "UP ", color: "00FF00" }
+      - { text: "({{total}})", color: "FFFFFF" }

@@ -1,0 +1,33 @@
+app_id: "saas_metrics"
+interval_seconds: 120
+
+source:
+  type: "http"
+  url: "https://api.example.com/v1/admin/metrics"
+  headers:
+    X-API-Secret: "${SAAS_METRICS_API_SECRET}"
+
+sub_apps:
+  - name: "app_users"
+    icon: "2058"
+    text:
+      - { text: "{{data.users_total}}", color: "FFFFFF" }
+      - { text: " (+{{data.new_users_last_week}})", color: "00FF00" }
+
+  - name: "app_premium"
+    icon: "5336"
+    text:
+      - { text: "{{data.users_premium}}", color: "FFFFFF" }
+      - { text: " (+{{data.new_users_premium_last_week}})", color: "FFD700" }
+
+  - name: "app_orders"
+    icon: "21072"
+    text:
+      - { text: "{{data.orders_total}}", color: "FFFFFF" }
+      - { text: " (+{{data.new_orders_last_week}})", color: "00FF00" }
+
+  - name: "app_support"
+    icon: "10558"
+    show_if: "data.tickets_open > 0"
+    text:
+      - { text: "{{data.tickets_open}}", color: "FF0000" }

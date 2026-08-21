@@ -1,0 +1,57 @@
+[project]
+name = "mcp-server-awtrix"
+version = "0.1.0"
+description = "Model Context Protocol (MCP) server & metric orchestrator for Ulanzi TC001 / Awtrix Light pixel displays"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Krzysztof Klodnicki" }
+]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "awtrix",
+    "awtrix-light",
+    "ulanzi",
+    "tc001",
+    "pixel-art",
+    "smart-clock",
+    "iot",
+    "ai-agent"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Home Automation",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+dependencies = [
+    "mcp>=1.0.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.2.0",
+    "jinja2>=3.1.4",
+    "pyyaml>=6.0.1",
+    "apscheduler>=3.10.4",
+    "watchfiles>=0.21.0",
+    "rich>=13.7.1"
+]
+
+[project.urls]
+Homepage = "https://github.com/klodnickik/mcp-server-awtrix"
+Repository = "https://github.com/klodnickik/mcp-server-awtrix.git"
+Issues = "https://github.com/klodnickik/mcp-server-awtrix/issues"
+
+[project.scripts]
+mcp-server-awtrix = "awtrix_mcp.server:main"
+awtrix-daemon = "awtrix_mcp.daemon:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
