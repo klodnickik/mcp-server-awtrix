@@ -417,7 +417,7 @@ In Cursor Settings $\rightarrow$ Features $\rightarrow$ MCP Servers $\rightarrow
 
 - [x] Core MCP Tools specification and design
 - [x] Declarative YAML orchestration schema
-- [ ] FastMCP implementation with async HTTP client
+- [x] MCPServer (mcp v2) implementation with async HTTP client
 - [ ] Live visual web preview for matrix pixel art
 - [ ] MQTT Transport layer support (optional alternative to REST)
 - [ ] Home Assistant service discovery export

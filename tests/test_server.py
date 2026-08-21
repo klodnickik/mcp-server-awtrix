@@ -1,0 +1,150 @@
+"""Integration tests for the AWTRIX MCP tools, via the in-process MCP Client."""
+
+import httpx
+import pytest
+import respx
+from mcp import Client
+
+from awtrix_mcp.config import AwtrixSettings
+from awtrix_mcp.server import build_server
+
+BASE_URL = "http://awtrix.local"
+
+
+@pytest.fixture
+def server():
+    return build_server(AwtrixSettings(base_url=BASE_URL))
+
+
+@pytest.mark.asyncio
+async def test_awtrix_notify_posts_expected_payload(server):
+    async with respx.mock:
+        route = respx.post(f"{BASE_URL}/api/notify").mock(return_value=httpx.Response(200))
+        async with Client(server, raise_exceptions=True) as client:
+            result = await client.call_tool("awtrix_notify", {"text": "Build Failed", "color": "FF0000"})
+        assert not result.is_error
+        assert route.called
+        assert result.structured_content["status"] == "sent"
+        assert result.structured_content["payload"]["color"] == "FF0000"
+
+
+@pytest.mark.asyncio
+async def test_awtrix_notify_accepts_text_segments():
+    server_local = build_server(AwtrixSettings(base_url=BASE_URL))
+    async with respx.mock:
+        respx.post(f"{BASE_URL}/api/notify").mock(return_value=httpx.Response(200))
+        async with Client(server_local, raise_exceptions=True) as client:
+            result = await client.call_tool(
+                "awtrix_notify",
+                {"text": [{"t": "FAIL", "c": "FF0000"}, {"t": " (2/10)", "c": "FFFFFF"}]},
+            )
+        assert result.structured_content["payload"]["text"] == [
+            {"t": "FAIL", "c": "FF0000"},
+            {"t": " (2/10)", "c": "FFFFFF"},
+        ]
+
+
+@pytest.mark.asyncio
+async def test_awtrix_notify_surfaces_connection_error(server):
+    async with respx.mock:
+        respx.post(f"{BASE_URL}/api/notify").mock(side_effect=httpx.ConnectError("refused"))
+        async with Client(server) as client:
+            result = await client.call_tool("awtrix_notify", {"text": "hi"})
+        assert result.is_error
+        assert "awtrix_notify" in result.content[0].text
+        assert "refused" in result.content[0].text
+
+
+@pytest.mark.asyncio
+async def test_awtrix_upsert_app_posts_to_named_route(server):
+    async with respx.mock:
+        route = respx.post(f"{BASE_URL}/api/custom", params={"name": "app_users"}).mock(
+            return_value=httpx.Response(200)
+        )
+        async with Client(server, raise_exceptions=True) as client:
+            result = await client.call_tool(
+                "awtrix_upsert_app", {"name": "app_users", "text": "1,420", "lifetime": 300}
+            )
+        assert route.called
+        assert result.structured_content["status"] == "upserted"
+        assert result.structured_content["payload"]["lifetime"] == 300
+
+
+@pytest.mark.asyncio
+async def test_awtrix_delete_app_sends_empty_body(server):
+    async with respx.mock:
+        route = respx.post(f"{BASE_URL}/api/custom", params={"name": "app_users"}).mock(
+            return_value=httpx.Response(200)
+        )
+        async with Client(server, raise_exceptions=True) as client:
+            result = await client.call_tool("awtrix_delete_app", {"name": "app_users"})
+        assert route.called
+        assert route.calls.last.request.content == b"{}"
+        assert result.structured_content == {"status": "deleted", "name": "app_users"}
+
+
+@pytest.mark.asyncio
+async def test_awtrix_get_device_state_returns_parsed_stats(server):
+    async with respx.mock:
+        respx.get(f"{BASE_URL}/api/stats").mock(
+            return_value=httpx.Response(200, json={"bat": 97, "lux": "8", "temp": "25", "ram": 152948})
+        )
+        async with Client(server, raise_exceptions=True) as client:
+            result = await client.call_tool("awtrix_get_device_state", {})
+        assert result.structured_content["battery"] == 97
+        assert result.structured_content["ram_free"] == 152948
+
+
+@pytest.mark.asyncio
+async def test_awtrix_set_settings_routes_brightness_and_power_separately(server):
+    async with respx.mock:
+        settings_route = respx.post(f"{BASE_URL}/api/settings").mock(return_value=httpx.Response(200))
+        power_route = respx.post(f"{BASE_URL}/api/power").mock(return_value=httpx.Response(200))
+        async with Client(server, raise_exceptions=True) as client:
+            result = await client.call_tool("awtrix_set_settings", {"brightness": 80, "power": True})
+        assert settings_route.called
+        assert settings_route.calls.last.request.content == b'{"BRI":80}'
+        assert power_route.called
+        assert power_route.calls.last.request.content == b'{"power":true}'
+        assert result.structured_content["settings"] == {"BRI": 80, "power": True}
+
+
+@pytest.mark.asyncio
+async def test_awtrix_set_settings_no_args_makes_no_http_calls(server):
+    async with respx.mock:
+        settings_route = respx.post(f"{BASE_URL}/api/settings").mock(return_value=httpx.Response(200))
+        power_route = respx.post(f"{BASE_URL}/api/power").mock(return_value=httpx.Response(200))
+        async with Client(server, raise_exceptions=True) as client:
+            result = await client.call_tool("awtrix_set_settings", {})
+        assert not settings_route.called
+        assert not power_route.called
+        assert result.structured_content == {"status": "updated", "settings": {}}
+
+
+@pytest.mark.asyncio
+async def test_awtrix_test_render_valid_payload_makes_no_http_calls(server):
+    async with respx.mock:
+        notify_route = respx.post(f"{BASE_URL}/api/notify")
+        custom_route = respx.post(f"{BASE_URL}/api/custom")
+        async with Client(server, raise_exceptions=True) as client:
+            result = await client.call_tool(
+                "awtrix_test_render", {"text": "hi", "kind": "notification", "color": "FF0000"}
+            )
+        assert result.structured_content["valid"] is True
+        assert result.structured_content["payload"]["color"] == "FF0000"
+        assert not notify_route.called
+        assert not custom_route.called
+
+
+@pytest.mark.asyncio
+async def test_awtrix_test_render_invalid_color_returns_errors(server):
+    # A dict for `color` mismatches ColorValue (str | list[int] | None), so the
+    # SDK's own argument schema (built from the same type annotation) rejects it
+    # before the tool body runs. This still exercises the "no unhandled crash"
+    # contract: the Client call returns a controlled error result, not an exception.
+    async with Client(server, raise_exceptions=True) as client:
+        result = await client.call_tool(
+            "awtrix_test_render", {"text": "hi", "color": {"bad": "shape"}}
+        )
+    assert result.is_error
+    assert "color" in result.content[0].text
