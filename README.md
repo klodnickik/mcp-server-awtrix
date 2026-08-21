@@ -343,6 +343,13 @@ pip install -e .
 python -m awtrix_mcp
 ```
 
+### Running Tests
+
+```bash
+uv sync --group dev
+uv run pytest
+```
+
 ### Docker & Docker Compose Setup
 
 Run using Docker Compose:
