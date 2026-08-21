@@ -139,16 +139,10 @@ def build_server(settings: AwtrixSettings | None = None) -> MCPServer:
     return server
 
 
-def _transport_type(value: str) -> str:
-    if value not in ("stdio", "sse"):
-        raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from 'stdio', 'sse')")
-    return value
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(prog="mcp-server-awtrix")
     parser.add_argument(
-        "--transport", type=_transport_type, default=os.environ.get("MCP_TRANSPORT", "stdio")
+        "--transport", choices=("stdio", "sse"), default=os.environ.get("MCP_TRANSPORT", "stdio")
     )
     parser.add_argument("--host", default=os.environ.get("MCP_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=os.environ.get("MCP_PORT", "8000"))
