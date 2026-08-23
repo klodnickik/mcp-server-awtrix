@@ -1,3 +1,4 @@
+import asyncio
 import textwrap
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -7,19 +8,20 @@ import pytest
 import respx
 
 from awtrix_mcp.client import AwtrixClient
-from awtrix_mcp.config import load_manifest
-from awtrix_mcp.daemon import DaemonState, _reload_apps_dir, poll_once
+from awtrix_mcp.config import BasicAuthConfig, SourceConfig, load_manifest
+from awtrix_mcp.daemon import DaemonState, _reload_apps_dir, fetch_source, poll_once, watch_apps_dir
 
 BASE_URL = "http://awtrix.local"
 SOURCE_URL = "https://api.checklyhq.com/v1/checks"
 
 
-def _write_checkly_manifest(path: Path, *, interval_seconds: int = 60) -> None:
+def _write_checkly_manifest(path: Path, *, interval_seconds: int = 60, enabled: bool = True) -> None:
     path.write_text(
         textwrap.dedent(
             f"""
             app_id: "checkly"
             name: "checkly_status"
+            enabled: {str(enabled).lower()}
             interval_seconds: {interval_seconds}
 
             source:
@@ -202,3 +204,130 @@ async def test_reload_apps_dir_deletes_apps_when_manifest_removed(tmp_path):
 
     assert scheduler.remove_job.called
     client.delete_app.assert_awaited_with("checkly_status")
+
+
+@pytest.mark.asyncio
+async def test_reload_apps_dir_unschedules_disabled_manifest(tmp_path):
+    manifest_path = tmp_path / "checkly.yaml"
+    _write_checkly_manifest(manifest_path, enabled=True)
+
+    scheduler = MagicMock()
+    client = AsyncMock()
+    state = DaemonState(scheduler=scheduler, http=MagicMock(), client=client)
+
+    await _reload_apps_dir(state, tmp_path, {})
+    scheduler.add_job.reset_mock()
+
+    _write_checkly_manifest(manifest_path, enabled=False)
+    await _reload_apps_dir(state, tmp_path, {})
+
+    assert scheduler.remove_job.called
+    assert scheduler.remove_job.call_args[0][0] == "checkly"
+    assert not scheduler.add_job.called
+
+
+@pytest.mark.asyncio
+async def test_reload_apps_dir_skips_invalid_manifest_and_logs(tmp_path, caplog):
+    valid = tmp_path / "checkly.yaml"
+    _write_checkly_manifest(valid)
+    invalid = tmp_path / "invalid.yaml"
+    invalid.write_text(
+        textwrap.dedent(
+            """
+            app_id: "bad"
+            interval_seconds: 1
+            unexpected_key: true
+            source: { type: "http", url: "http://x" }
+            display: [{ condition: "default", text: [{ text: "hi" }] }]
+            """
+        )
+    )
+
+    scheduler = MagicMock()
+    client = AsyncMock()
+    state = DaemonState(scheduler=scheduler, http=MagicMock(), client=client)
+
+    with caplog.at_level("WARNING"):
+        await _reload_apps_dir(state, tmp_path, {})
+
+    assert "invalid.yaml" in caplog.text
+    assert state.manifests[valid][0].app_id == "checkly"
+    assert len(state.manifests) == 1
+
+
+@pytest.mark.asyncio
+async def test_watch_apps_dir_triggers_reload_on_change(tmp_path, monkeypatch):
+    async def fake_awatch(_path, stop_event):  # pylint: disable=unused-argument
+        yield {("added", str(tmp_path / "x.yaml"))}
+
+    monkeypatch.setattr("awtrix_mcp.daemon.watchfiles.awatch", fake_awatch)
+
+    reload_calls = []
+
+    async def fake_reload(state, apps_dir, env):
+        reload_calls.append((state, apps_dir, env))
+
+    monkeypatch.setattr("awtrix_mcp.daemon._reload_apps_dir", fake_reload)
+
+    state = DaemonState(scheduler=MagicMock(), http=MagicMock(), client=AsyncMock())
+    await watch_apps_dir(state, tmp_path, {}, asyncio.Event())
+
+    assert len(reload_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_source_sends_basic_auth_header():
+    source = SourceConfig(url="https://api.example.com/data", auth=BasicAuthConfig(username="u", password="p"))
+
+    async with respx.mock:
+        route = respx.get("https://api.example.com/data").mock(return_value=httpx.Response(200, json={}))
+        async with httpx.AsyncClient() as http:
+            await fetch_source(http, source)
+
+        assert route.called
+        assert route.calls.last.request.headers["authorization"] == "Basic dTpw"
+
+
+@pytest.mark.asyncio
+async def test_fetch_source_omits_auth_header_when_unset():
+    source = SourceConfig(url="https://api.example.com/data")
+
+    async with respx.mock:
+        route = respx.get("https://api.example.com/data").mock(return_value=httpx.Response(200, json={}))
+        async with httpx.AsyncClient() as http:
+            await fetch_source(http, source)
+
+        assert "authorization" not in route.calls.last.request.headers
+
+
+@pytest.mark.asyncio
+async def test_poll_once_sub_app_shows_when_show_if_true(tmp_path):
+    manifest_path = tmp_path / "saas_metrics.yaml"
+    _write_saas_metrics_manifest(manifest_path)
+    manifest = load_manifest(manifest_path, env={})
+
+    async with respx.mock:
+        respx.get("https://api.example.com/v1/admin/metrics").mock(
+            return_value=httpx.Response(200, json={"tickets_open": 3})
+        )
+        show_route = respx.post(f"{BASE_URL}/api/custom", params={"name": "app_support"}).mock(
+            return_value=httpx.Response(200)
+        )
+
+        async with httpx.AsyncClient() as http, AwtrixClient(base_url=BASE_URL) as client:
+            await poll_once(http, client, manifest)
+
+        assert show_route.called
+        assert b"3" in show_route.calls.last.request.content
+
+
+@pytest.mark.asyncio
+async def test_poll_once_invalid_json_response_does_not_raise(tmp_path):
+    manifest_path = tmp_path / "checkly.yaml"
+    _write_checkly_manifest(manifest_path)
+    manifest = load_manifest(manifest_path, env={})
+
+    async with respx.mock:
+        respx.get(SOURCE_URL).mock(return_value=httpx.Response(200, text="<html>not json</html>"))
+        async with httpx.AsyncClient() as http, AwtrixClient(base_url=BASE_URL) as client:
+            await poll_once(http, client, manifest)  # must not raise

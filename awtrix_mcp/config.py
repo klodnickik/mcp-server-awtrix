@@ -70,9 +70,9 @@ class SourceConfig(BaseModel):
 
 
 class TemplateTextSegment(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    model_config = ConfigDict(extra="forbid")
 
-    text: str = Field(validation_alias="text")
+    text: str
     color: str | None = None
 
 
@@ -114,29 +114,25 @@ class ManifestConfig(BaseModel):
     @model_validator(mode="after")
     def _require_display_or_sub_apps(self) -> "ManifestConfig":
         if not self.display and not self.sub_apps:
-            raise ManifestError("manifest must define at least one of 'display' or 'sub_apps'")
+            raise ValueError("manifest must define at least one of 'display' or 'sub_apps'")
         return self
 
 
 def load_manifest(path: Path, env: Mapping[str, str] | None = None) -> ManifestConfig:
     try:
         raw = yaml.safe_load(path.read_text())
+    except OSError as exc:
+        raise ManifestError(f"{path}: unreadable: {exc}") from exc
     except yaml.YAMLError as exc:
         raise ManifestError(f"{path}: invalid YAML: {exc}") from exc
     try:
         resolved = resolve_secrets(raw, env or os.environ)
-        return ManifestConfig.model_validate(resolved)
-    except (SecretResolutionError, ValidationError, ManifestError) as exc:
+    except SecretResolutionError as exc:
         raise ManifestError(f"{path}: {exc}") from exc
-
-
-def discover_manifests(
-    apps_dir: Path, env: Mapping[str, str] | None = None
-) -> dict[Path, ManifestConfig]:
-    manifests: dict[Path, ManifestConfig] = {}
-    for path in sorted(list(apps_dir.glob("*.yaml")) + list(apps_dir.glob("*.yml"))):
-        try:
-            manifests[path] = load_manifest(path, env)
-        except ManifestError as exc:
-            logger.warning("skipping manifest %s: %s", path, exc)
-    return manifests
+    try:
+        return ManifestConfig.model_validate(resolved)
+    except ValidationError as exc:
+        # Deliberately omit the validation error's own message: it may embed
+        # the post-substitution value of a field a `${SECRET}` was resolved
+        # into, and this gets logged verbatim by the daemon's hot-reload path.
+        raise ManifestError(f"{path}: manifest validation failed (see raw manifest for details)") from exc

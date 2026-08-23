@@ -272,6 +272,17 @@ display:
       - { text: "({{total}})", color: "FFFFFF" }
 ```
 
+`source` also supports HTTP Basic Auth as an alternative to header-based credentials:
+
+```yaml
+source:
+  type: "http"
+  url: "https://api.example.com/v1/private"
+  auth:
+    username: "${API_USERNAME}"
+    password: "${API_PASSWORD}"
+```
+
 ### Example 2: Multi-Metric SaaS Dashboard
 `apps/saas_metrics.yaml`
 
@@ -346,6 +357,11 @@ python -m awtrix_mcp
 Or over SSE (HTTP), for clients that connect remotely:
 ```bash
 uv run mcp-server-awtrix --transport sse --host 0.0.0.0 --port 8000
+```
+
+Run the metric poller daemon locally (polls `apps/*.yaml` in the background):
+```bash
+uv run awtrix-daemon --apps-dir apps
 ```
 
 ### Running Tests

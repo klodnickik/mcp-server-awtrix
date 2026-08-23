@@ -55,6 +55,8 @@ async def fetch_source(http: httpx.AsyncClient, source: SourceConfig) -> Any:
         return _wrap_json(response.json())
     except httpx.HTTPError as exc:
         raise SourceFetchError(str(exc)) from exc
+    except ValueError as exc:
+        raise SourceFetchError(f"invalid JSON response: {exc}") from exc
 
 
 def _build_context(manifest: ManifestConfig, data: Any) -> dict:
@@ -100,13 +102,22 @@ async def poll_once(
 ) -> None:
     try:
         data = await fetch_source(http, manifest.source)
+    except SourceFetchError as exc:
+        logger.warning("source fetch failed for %s: %s", manifest.app_id, exc)
+        return
+
+    try:
         context = _build_context(manifest, data)
+    except ExpressionError:
+        return  # _build_context already logs which transform failed
+
+    try:
         if manifest.display:
             await _run_display_rules(client, manifest, context)
         if manifest.sub_apps:
             await _run_sub_apps(client, manifest, context)
-    except (SourceFetchError, ExpressionError, AwtrixError) as exc:
-        logger.warning("poll cycle failed for %s: %s", manifest.app_id, exc)
+    except (ExpressionError, AwtrixError) as exc:
+        logger.warning("display/sub-app push failed for %s: %s", manifest.app_id, exc)
 
 
 class DaemonState:
@@ -139,7 +150,11 @@ async def _reload_apps_dir(state: DaemonState, apps_dir: Path, env: dict) -> Non
     current_paths = sorted(list(apps_dir.glob("*.yaml")) + list(apps_dir.glob("*.yml")))
 
     for path in current_paths:
-        raw_bytes = path.read_bytes()
+        try:
+            raw_bytes = path.read_bytes()
+        except OSError as exc:
+            logger.warning("skipping manifest %s: unreadable: %s", path, exc)
+            continue
         content_hash = hashlib.sha256(raw_bytes).hexdigest()
         previous = state.manifests.get(path)
         if previous is not None and previous[1] == content_hash:
@@ -162,7 +177,10 @@ async def _reload_apps_dir(state: DaemonState, apps_dir: Path, env: dict) -> Non
         app_names = [manifest.name] if manifest.display else []
         app_names += [sub.name for sub in manifest.sub_apps]
         for name in app_names:
-            await state.client.delete_app(name)
+            try:
+                await state.client.delete_app(name)
+            except AwtrixError as exc:
+                logger.warning("failed to delete app %s for removed manifest %s: %s", name, path, exc)
 
 
 async def watch_apps_dir(

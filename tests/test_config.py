@@ -3,12 +3,13 @@
 import textwrap
 
 import pytest
+from pydantic import ValidationError
 
 from awtrix_mcp.config import (
     AwtrixSettings,
+    ManifestConfig,
     ManifestError,
     SecretResolutionError,
-    discover_manifests,
     load_manifest,
     resolve_secrets,
 )
@@ -108,32 +109,12 @@ def test_load_manifest_rejects_missing_display_and_sub_apps(tmp_path):
         load_manifest(manifest_path, env={})
 
 
-def test_discover_manifests_skips_invalid_files_and_logs(tmp_path, caplog):
-    valid = tmp_path / "valid.yaml"
-    valid.write_text(
-        textwrap.dedent(
-            """
-            app_id: "ok"
-            interval_seconds: 30
-            source: { type: "http", url: "http://x" }
-            display: [{ condition: "default", text: [{ text: "hi" }] }]
-            """
+def test_manifest_config_missing_display_and_sub_apps_raises_validation_error():
+    with pytest.raises(ValidationError):
+        ManifestConfig.model_validate(
+            {
+                "app_id": "t",
+                "interval_seconds": 1,
+                "source": {"type": "http", "url": "http://x"},
+            }
         )
-    )
-    invalid = tmp_path / "invalid.yaml"
-    invalid.write_text(
-        textwrap.dedent(
-            """
-            app_id: "bad"
-            interval_seconds: 1
-            unexpected_key: true
-            source: { type: "http", url: "http://x" }
-            display: [{ condition: "default", text: [{ text: "hi" }] }]
-            """
-        )
-    )
-    with caplog.at_level("WARNING"):
-        manifests = discover_manifests(tmp_path, env={})
-    assert list(manifests.values())[0].app_id == "ok"
-    assert len(manifests) == 1
-    assert "invalid.yaml" in caplog.text

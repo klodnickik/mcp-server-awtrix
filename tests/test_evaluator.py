@@ -57,6 +57,12 @@ def test_render_template_dot_access():
     assert render_template("{{data.users_total}}", context) == "5"
 
 
+def test_render_template_missing_field_raises_instead_of_rendering_blank():
+    context = {"data": AttrDict({"users_total": 5})}
+    with pytest.raises(ExpressionError):
+        render_template("{{data.missing_field}}", context)
+
+
 def test_attrdict_nested_dict_and_list_wrapping():
     wrapped = AttrDict({"a": [{"b": 1}]})
     assert wrapped.a[0].b == 1
@@ -91,9 +97,30 @@ def test_open_builtin_is_blocked():
         evaluate_expression("open('/etc/passwd').read()", {})
 
 
-def test_multiple_for_clauses_in_comprehension_are_rejected():
+def test_list_comprehension_syntax_is_unsupported():
     with pytest.raises(ExpressionError):
-        evaluate_expression("[x for x in range(3) for y in range(3)]", {})
+        evaluate_expression("[x for x in range(3)]", {})
+
+
+def test_generator_expression_with_multiple_for_clauses_is_rejected():
+    with pytest.raises(ExpressionError):
+        evaluate_expression("sum(1 for x in range(3) for y in range(3))", {})
+
+
+def test_bare_generator_expression_validates_eagerly_without_consumption():
+    with pytest.raises(ExpressionError):
+        evaluate_expression("(x for x in range(3) for y in range(3))", {})
+
+
+def test_format_method_is_blocked():
+    data = AttrDict({"x": 1})
+    with pytest.raises(ExpressionError):
+        evaluate_expression("'{0.__class__}'.format(data)", {"data": data})
+
+
+def test_format_map_method_is_blocked():
+    with pytest.raises(ExpressionError):
+        evaluate_expression("'{x}'.format_map({'x': 1})", {})
 
 
 def test_import_statement_is_rejected():
