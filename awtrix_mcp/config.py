@@ -1,7 +1,6 @@
 """Environment-driven settings for the AWTRIX MCP server, and the declarative
 manifest schema (`apps/*.yaml`) consumed by the metric daemon."""
 
-import logging
 import os
 import re
 from collections.abc import Mapping
@@ -11,8 +10,6 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-logger = logging.getLogger(__name__)
 
 
 class AwtrixSettings(BaseSettings):
