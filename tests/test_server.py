@@ -243,3 +243,13 @@ def test_main_rejects_invalid_transport_from_env(monkeypatch, capsys):
         main()
     assert exc_info.value.code == 2
     assert "invalid choice: 'bogus'" in capsys.readouterr().err
+
+
+@pytest.mark.asyncio
+async def test_health_route_returns_ok():
+    server_local = build_server(AwtrixSettings(base_url=BASE_URL))
+    transport = httpx.ASGITransport(app=server_local.sse_app())
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
+        response = await http_client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}

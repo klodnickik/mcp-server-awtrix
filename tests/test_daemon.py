@@ -8,8 +8,15 @@ import pytest
 import respx
 
 from awtrix_mcp.client import AwtrixClient
-from awtrix_mcp.config import BasicAuthConfig, SourceConfig, load_manifest
-from awtrix_mcp.daemon import DaemonState, _reload_apps_dir, fetch_source, poll_once, watch_apps_dir
+from awtrix_mcp.config import AwtrixSettings, BasicAuthConfig, SourceConfig, load_manifest
+from awtrix_mcp.daemon import (
+    DaemonState,
+    _reload_apps_dir,
+    fetch_source,
+    poll_once,
+    run_daemon,
+    watch_apps_dir,
+)
 
 BASE_URL = "http://awtrix.local"
 SOURCE_URL = "https://api.checklyhq.com/v1/checks"
@@ -452,3 +459,23 @@ async def test_poll_once_transform_failure_does_not_raise_and_skips_push(tmp_pat
             await poll_once(http, client, manifest)  # must not raise
 
         assert not app_route.called  # push must be skipped, not attempted with a broken context
+
+
+@pytest.mark.asyncio
+async def test_run_daemon_touches_heartbeat_file(tmp_path, monkeypatch):
+    heartbeat_path = tmp_path / "heartbeat"
+    monkeypatch.setenv("DAEMON_HEARTBEAT_FILE", str(heartbeat_path))
+    apps_dir = tmp_path / "apps"
+    apps_dir.mkdir()
+
+    task = asyncio.create_task(run_daemon(apps_dir, AwtrixSettings(base_url=BASE_URL)))
+    try:
+        for _ in range(50):
+            if heartbeat_path.exists():
+                break
+            await asyncio.sleep(0.1)
+        assert heartbeat_path.exists()
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task

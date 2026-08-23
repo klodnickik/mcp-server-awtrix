@@ -1,57 +1,52 @@
 # syntax=docker/dockerfile:1
 FROM python:3.12-slim AS builder
 
+COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /bin/
+
+ENV UV_PYTHON_DOWNLOADS=0 \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1
+
 WORKDIR /app
 
-# Install build dependencies and uv for fast, reliable package resolution
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-install-project --no-dev --no-editable
 
-RUN pip install --no-cache-dir uv
+COPY . /app
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev --no-editable
 
-# Copy dependency specifications
-COPY pyproject.toml .
-
-# Install dependencies into a virtual environment
-RUN uv venv /app/.venv
-ENV VIRTUAL_ENV=/app/.venv
-ENV PATH="/app/.venv/bin:$PATH"
-RUN uv pip install -e .
-
-# Final runtime image
 FROM python:3.12-slim AS runtime
 
+RUN groupadd -g 1000 appuser && \
+    useradd -u 1000 -g appuser -s /usr/sbin/nologin -m appuser
+
 WORKDIR /app
 
-# Create non-root user for security
-RUN groupadd -g 1000 appuser && \
-    useradd -u 1000 -g appuser -s /bin/bash -m appuser
+COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
+COPY --from=builder --chown=appuser:appuser /app/awtrix_mcp ./awtrix_mcp
+COPY --from=builder --chown=appuser:appuser /app/pyproject.toml /app/README.md ./
+COPY --chown=appuser:appuser docker/healthcheck.py ./docker/healthcheck.py
+COPY --chown=appuser:appuser apps/ ./apps/
 
-# Copy virtualenv from builder
-COPY --from=builder /app/.venv /app/.venv
-ENV VIRTUAL_ENV=/app/.venv
-ENV PATH="/app/.venv/bin:$PATH"
-
-# Copy source code and app definitions
-COPY pyproject.toml README.md .
-COPY awtrix_mcp/ ./awtrix_mcp/
-COPY apps/ ./apps/
-
-# Set ownership
-RUN chown -R appuser:appuser /app
-
-USER appuser
-
-# Default environment variables
-ENV PYTHONUNBUFFERED=1 \
+ENV VIRTUAL_ENV=/app/.venv \
+    PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     APPS_DIR=/app/apps \
     MCP_TRANSPORT=sse \
     MCP_HOST=0.0.0.0 \
-    MCP_PORT=8000
+    MCP_PORT=8000 \
+    CONTAINER_ROLE=metric-daemon \
+    DAEMON_HEARTBEAT_FILE=/tmp/awtrix-daemon-heartbeat
+
+USER appuser
 
 EXPOSE 8000
 
-# Default command runs the daemon (can be overridden to run MCP server)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["python", "docker/healthcheck.py"]
+
 CMD ["python", "-m", "awtrix_mcp.daemon"]

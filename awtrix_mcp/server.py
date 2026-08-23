@@ -12,6 +12,8 @@ from typing import Any, Literal
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import ToolAnnotations
 from pydantic import ValidationError
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 
 from . import __version__
 from .client import AwtrixClient
@@ -135,6 +137,10 @@ def build_server(settings: AwtrixSettings | None = None) -> MCPServer:
         except ValidationError as exc:
             return {"valid": False, "errors": exc.errors(include_url=False)}
         return {"valid": True, "kind": kind, "payload": payload.model_dump(by_alias=True, exclude_none=True)}
+
+    @server.custom_route("/health", methods=["GET"])
+    async def health_check(_request: Request) -> Response:
+        return JSONResponse({"status": "ok"})
 
     return server
 

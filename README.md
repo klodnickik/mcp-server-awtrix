@@ -391,6 +391,23 @@ docker compose up -d metric-daemon
 docker compose logs -f
 ```
 
+**Multi-arch builds (Raspberry Pi / arm64):**
+
+```bash
+# One-time setup for a buildx builder that supports multiple platforms
+docker buildx create --use
+
+docker buildx build --platform linux/amd64,linux/arm64 -t <you>/mcp-server-awtrix:local .
+```
+
+Prebuilt multi-arch images (`linux/amd64` + `linux/arm64`) are also published to
+`ghcr.io/klodnickik/mcp-server-awtrix` by CI on every push to `main` and on version
+tags, so NAS/Pi/cloud users can `docker pull` instead of building locally.
+
+**Health check:** the `mcp-server` container exposes `GET http://localhost:8000/health`,
+which returns `{"status": "ok"}` when the server is up. `CONTAINER_ROLE` and
+`DAEMON_HEARTBEAT_FILE` are internal compose-wiring environment variables used to pick
+the right healthcheck per service — they don't need to be set in `.env`.
 
 ### MCP Client Configuration
 
