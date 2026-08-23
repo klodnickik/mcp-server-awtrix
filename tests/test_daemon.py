@@ -256,6 +256,50 @@ async def test_reload_apps_dir_skips_invalid_manifest_and_logs(tmp_path, caplog)
 
 
 @pytest.mark.asyncio
+async def test_reload_apps_dir_skips_manifest_with_duplicate_app_id(tmp_path, caplog):
+    first = tmp_path / "checkly.yaml"
+    _write_checkly_manifest(first)
+    duplicate = tmp_path / "checkly_copy.yaml"
+    _write_checkly_manifest(duplicate)
+
+    scheduler = MagicMock()
+    client = AsyncMock()
+    state = DaemonState(scheduler=scheduler, http=MagicMock(), client=client)
+
+    with caplog.at_level("WARNING"):
+        await _reload_apps_dir(state, tmp_path, {})
+
+    assert "app_id 'checkly' already used by" in caplog.text
+    assert scheduler.add_job.call_count == 1
+    assert list(state.manifests.keys()) == [first]
+
+
+@pytest.mark.asyncio
+async def test_reload_apps_dir_keeps_skipping_duplicate_app_id_across_reload_cycles(tmp_path, caplog):
+    first = tmp_path / "checkly.yaml"
+    _write_checkly_manifest(first)
+    duplicate = tmp_path / "checkly_copy.yaml"
+    _write_checkly_manifest(duplicate)
+
+    scheduler = MagicMock()
+    client = AsyncMock()
+    state = DaemonState(scheduler=scheduler, http=MagicMock(), client=client)
+
+    await _reload_apps_dir(state, tmp_path, {})
+    scheduler.add_job.reset_mock()
+
+    # Unrelated filesystem event (e.g. an editor touching the duplicate file)
+    # re-triggers a reload; the duplicate must still be rejected, not silently
+    # allowed to steal the job/app now that a cycle has passed.
+    with caplog.at_level("WARNING"):
+        await _reload_apps_dir(state, tmp_path, {})
+
+    assert "app_id 'checkly' already used by" in caplog.text
+    assert not scheduler.add_job.called
+    assert list(state.manifests.keys()) == [first]
+
+
+@pytest.mark.asyncio
 async def test_watch_apps_dir_triggers_reload_on_change(tmp_path, monkeypatch):
     async def fake_awatch(_path, stop_event):  # pylint: disable=unused-argument
         yield {("added", str(tmp_path / "x.yaml"))}
@@ -331,3 +375,80 @@ async def test_poll_once_invalid_json_response_does_not_raise(tmp_path):
         respx.get(SOURCE_URL).mock(return_value=httpx.Response(200, text="<html>not json</html>"))
         async with httpx.AsyncClient() as http, AwtrixClient(base_url=BASE_URL) as client:
             await poll_once(http, client, manifest)  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_poll_once_device_error_during_display_push_does_not_raise(tmp_path):
+    manifest_path = tmp_path / "checkly.yaml"
+    _write_checkly_manifest(manifest_path)
+    manifest = load_manifest(manifest_path, env={})
+
+    async with respx.mock:
+        respx.get(SOURCE_URL).mock(
+            return_value=httpx.Response(200, json=[{"hasFailures": True}, {"hasFailures": False}])
+        )
+        respx.post(f"{BASE_URL}/api/custom", params={"name": "checkly_status"}).mock(
+            return_value=httpx.Response(500)
+        )
+
+        async with httpx.AsyncClient() as http, AwtrixClient(base_url=BASE_URL) as client:
+            await poll_once(http, client, manifest)  # must not raise despite AwtrixResponseError
+
+
+@pytest.mark.asyncio
+async def test_poll_once_template_error_during_display_push_does_not_raise(tmp_path):
+    manifest_path = tmp_path / "checkly.yaml"
+    manifest_path.write_text(
+        textwrap.dedent(
+            f"""
+            app_id: "checkly"
+            interval_seconds: 60
+            source:
+              type: "http"
+              url: "{SOURCE_URL}"
+            display:
+              - condition: "default"
+                text:
+                  - {{ text: "{{{{data.nonexistent_field}}}}", color: "FFFFFF" }}
+            """
+        )
+    )
+    manifest = load_manifest(manifest_path, env={})
+
+    async with respx.mock:
+        respx.get(SOURCE_URL).mock(return_value=httpx.Response(200, json={"total": 1}))
+        async with httpx.AsyncClient() as http, AwtrixClient(base_url=BASE_URL) as client:
+            await poll_once(http, client, manifest)  # must not raise despite StrictUndefined ExpressionError
+
+
+@pytest.mark.asyncio
+async def test_poll_once_transform_failure_does_not_raise_and_skips_push(tmp_path):
+    manifest_path = tmp_path / "checkly.yaml"
+    manifest_path.write_text(
+        textwrap.dedent(
+            f"""
+            app_id: "checkly"
+            interval_seconds: 60
+            source:
+              type: "http"
+              url: "{SOURCE_URL}"
+            transform:
+              failures: "data.nonexistent_field"
+            display:
+              - condition: "default"
+                text:
+                  - {{ text: "UP", color: "00FF00" }}
+            """
+        )
+    )
+    manifest = load_manifest(manifest_path, env={})
+
+    async with respx.mock:
+        respx.get(SOURCE_URL).mock(return_value=httpx.Response(200, json={"total": 1}))
+        app_route = respx.post(f"{BASE_URL}/api/custom", params={"name": "checkly"}).mock(
+            return_value=httpx.Response(200)
+        )
+        async with httpx.AsyncClient() as http, AwtrixClient(base_url=BASE_URL) as client:
+            await poll_once(http, client, manifest)  # must not raise
+
+        assert not app_route.called  # push must be skipped, not attempted with a broken context

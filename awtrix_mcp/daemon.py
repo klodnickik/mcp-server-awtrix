@@ -53,6 +53,10 @@ async def fetch_source(http: httpx.AsyncClient, source: SourceConfig) -> Any:
         )
         response.raise_for_status()
         return _wrap_json(response.json())
+    except httpx.HTTPStatusError as exc:
+        raise SourceFetchError(
+            f"{exc.response.status_code} from {exc.request.url}: {exc.response.text[:500]}"
+        ) from exc
     except httpx.HTTPError as exc:
         raise SourceFetchError(str(exc)) from exc
     except ValueError as exc:
@@ -149,6 +153,7 @@ def _schedule(state: DaemonState, manifest: ManifestConfig) -> None:
 async def _reload_apps_dir(state: DaemonState, apps_dir: Path, env: dict) -> None:
     current_paths = sorted(list(apps_dir.glob("*.yaml")) + list(apps_dir.glob("*.yml")))
 
+    seen_app_ids: dict[str, Path] = {}
     for path in current_paths:
         try:
             raw_bytes = path.read_bytes()
@@ -158,12 +163,20 @@ async def _reload_apps_dir(state: DaemonState, apps_dir: Path, env: dict) -> Non
         content_hash = hashlib.sha256(raw_bytes).hexdigest()
         previous = state.manifests.get(path)
         if previous is not None and previous[1] == content_hash:
+            seen_app_ids[previous[0].app_id] = path
             continue
         try:
             manifest = load_manifest(path, env)
         except ManifestError as exc:
             logger.warning("skipping manifest %s: %s", path, exc)
             continue
+        if manifest.app_id in seen_app_ids:
+            logger.warning(
+                "skipping manifest %s: app_id '%s' already used by %s",
+                path, manifest.app_id, seen_app_ids[manifest.app_id],
+            )
+            continue
+        seen_app_ids[manifest.app_id] = path
         state.manifests[path] = (manifest, content_hash)
         _schedule(state, manifest)
 
