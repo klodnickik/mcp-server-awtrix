@@ -91,7 +91,7 @@ When working with AI coding agents:
 ### Non-Functional Requirements
 
 - **Latency**: Direct MCP tool executions must dispatch to Awtrix within $< 150\text{ms}$ on local networks.
-- **Resilience**: Orchestrator retries failed API fetches with exponential backoff before marking an app degraded.
+- **Resilience**: A failed source fetch is logged and skipped for that cycle; the next scheduled poll (per `interval_seconds`) retries automatically. No exponential backoff or explicit "degraded" state is applied to source fetches.
 - **Portability**: Packaged as standard Python package with `uv`/`pipx` support, Docker container, and standalone CLI.
 
 ---
@@ -121,7 +121,7 @@ When working with AI coding agents:
 │  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
 │  │                               Core Engine & Driver                               │  │
 │  │  - Schema Validator (Pydantic)                                                   │  │
-│  │  - Template & Expression Engine (Jinja2 / JSONPath)                              │  │
+│  │  - Template & Expression Engine (Jinja2 / restricted Python evaluator)           │  │
 │  │  - Secret Resolver (.env)                                                        │  │
 │  │  - Awtrix REST / WebSocket Client                                                │  │
 │  └──────────────────────────────────────────┬───────────────────────────────────────┘  │
@@ -142,7 +142,7 @@ When working with AI coding agents:
    - Exposes tools with strict JSON schemas and human-readable documentation for AI models.
 2. **Declarative Polling Engine**:
    - Asynchronous worker managing task lifecycles for file-based app manifests.
-   - Evaluates HTTP requests, extracts fields using JSONPath/expressions, and resolves display rules.
+   - Evaluates HTTP requests, extracts fields using a sandboxed expression evaluator (see §4), and resolves display rules.
 3. **Awtrix Driver**:
    - Encapsulates device communication, request deduplication, connection pooling, and error recovery.
 4. **Configuration & Security Layer**:
@@ -272,6 +272,17 @@ display:
       - { text: "({{total}})", color: "FFFFFF" }
 ```
 
+`source` also supports HTTP Basic Auth as an alternative to header-based credentials:
+
+```yaml
+source:
+  type: "http"
+  url: "https://api.example.com/v1/private"
+  auth:
+    username: "${API_USERNAME}"
+    password: "${API_PASSWORD}"
+```
+
 ### Example 2: Multi-Metric SaaS Dashboard
 `apps/saas_metrics.yaml`
 
@@ -346,6 +357,11 @@ python -m awtrix_mcp
 Or over SSE (HTTP), for clients that connect remotely:
 ```bash
 uv run mcp-server-awtrix --transport sse --host 0.0.0.0 --port 8000
+```
+
+Run the metric poller daemon locally (polls `apps/*.yaml` in the background):
+```bash
+uv run awtrix-daemon --apps-dir apps
 ```
 
 ### Running Tests
