@@ -26,6 +26,8 @@ RUN groupadd -g 1000 appuser && \
 WORKDIR /app
 
 COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
+# awtrix_mcp is also installed non-editable into .venv above, but the raw
+# source copy here is what's actually imported at runtime (CWD-first sys.path).
 COPY --from=builder --chown=appuser:appuser /app/awtrix_mcp ./awtrix_mcp
 COPY --from=builder --chown=appuser:appuser /app/pyproject.toml /app/README.md ./
 COPY --chown=appuser:appuser docker/healthcheck.py ./docker/healthcheck.py

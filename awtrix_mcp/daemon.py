@@ -35,8 +35,14 @@ class SourceFetchError(Exception):
     """Raised when a manifest's HTTP source cannot be fetched or parsed."""
 
 
+DAEMON_HEARTBEAT_INTERVAL_SECONDS = 30
+
+
 def _touch_heartbeat(path: Path) -> None:
-    path.touch()
+    try:
+        path.touch()
+    except OSError as exc:
+        logger.warning("failed to write heartbeat file %s: %s", path, exc)
 
 
 def _wrap_json(data: Any) -> Any:
@@ -223,7 +229,7 @@ async def run_daemon(apps_dir: Path, settings: AwtrixSettings) -> None:
         scheduler.add_job(
             _touch_heartbeat,
             "interval",
-            seconds=30,
+            seconds=DAEMON_HEARTBEAT_INTERVAL_SECONDS,
             id="__heartbeat__",
             next_run_time=datetime.now(),
             args=[heartbeat_path],

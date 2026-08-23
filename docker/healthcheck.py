@@ -15,9 +15,10 @@ HEARTBEAT_STALE_AFTER_SECONDS = 90
 def _check_mcp_server() -> bool:
     port = os.environ.get("MCP_PORT", "8000")
     try:
-        urllib.request.urlopen(f"http://localhost:{port}/health", timeout=3)
-        return True
-    except OSError:
+        with urllib.request.urlopen(f"http://localhost:{port}/health", timeout=3):
+            return True
+    except OSError as exc:
+        print(f"mcp-server healthcheck failed: {exc}", file=sys.stderr)
         return False
 
 
@@ -25,9 +26,15 @@ def _check_metric_daemon() -> bool:
     heartbeat = pathlib.Path(
         os.environ.get("DAEMON_HEARTBEAT_FILE", "/tmp/awtrix-daemon-heartbeat")
     )
-    if not heartbeat.exists():
+    try:
+        age = time.time() - heartbeat.stat().st_mtime
+    except FileNotFoundError:
+        print(f"metric-daemon healthcheck failed: heartbeat file {heartbeat} does not exist", file=sys.stderr)
         return False
-    return (time.time() - heartbeat.stat().st_mtime) < HEARTBEAT_STALE_AFTER_SECONDS
+    if age >= HEARTBEAT_STALE_AFTER_SECONDS:
+        print(f"metric-daemon healthcheck failed: heartbeat stale ({age:.0f}s old)", file=sys.stderr)
+        return False
+    return True
 
 
 def main() -> int:
