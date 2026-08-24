@@ -511,9 +511,42 @@ def test_validate_no_files_found_exits_one(tmp_path, monkeypatch, capsys):
 
 def test_validate_dir_wide_validates_all_manifests(tmp_path, monkeypatch, capsys):
     _write_checkly_manifest(tmp_path / "checkly.yaml")
-    _write_checkly_manifest(tmp_path / "checkly2.yaml")
+    _write_saas_metrics_manifest(tmp_path / "saas_metrics.yaml")
     monkeypatch.setattr("sys.argv", ["awtrix-daemon", "--apps-dir", str(tmp_path), "validate"])
     with pytest.raises(SystemExit) as exc_info:
         main()
     assert exc_info.value.code == 0
     assert capsys.readouterr().out.count("OK") == 2
+
+
+def test_validate_missing_file_exits_one(tmp_path, monkeypatch, capsys):
+    missing_path = tmp_path / "does-not-exist.yaml"
+    monkeypatch.setattr("sys.argv", ["awtrix-daemon", "validate", str(missing_path)])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
+    assert "INVALID" in capsys.readouterr().err
+
+
+def test_validate_dir_wide_mixed_valid_and_invalid(tmp_path, monkeypatch, capsys):
+    _write_checkly_manifest(tmp_path / "good.yaml")
+    (tmp_path / "bad.yaml").write_text("app_id: t\ninterval_seconds: 1\nsource: {type: http, url: 'http://x'}\n")
+    monkeypatch.setattr("sys.argv", ["awtrix-daemon", "--apps-dir", str(tmp_path), "validate"])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "OK" in captured.out
+    assert "INVALID" in captured.err
+
+
+def test_validate_duplicate_app_id_exits_one(tmp_path, monkeypatch, capsys):
+    _write_checkly_manifest(tmp_path / "checkly.yaml")
+    _write_checkly_manifest(tmp_path / "checkly_copy.yaml")
+    monkeypatch.setattr("sys.argv", ["awtrix-daemon", "--apps-dir", str(tmp_path), "validate"])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "OK" in captured.out
+    assert "app_id 'checkly' already used by" in captured.err

@@ -91,6 +91,9 @@ line-length = 120
 target-version = "py310"
 
 [tool.ruff.lint]
+# DTZ (naive datetime) and PYI (stub/typing style) intentionally excluded: real
+# findings exist (daemon.py naive datetime.now() in scheduler triggers, client.py
+# __aenter__ return type) but are cosmetic here and deferred, not silently missed.
 select = ["E", "F", "I", "B", "UP", "SIM", "C4", "RUF"]
 
 [tool.mypy]

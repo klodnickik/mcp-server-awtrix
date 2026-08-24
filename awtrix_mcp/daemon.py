@@ -252,14 +252,23 @@ def _run_validate(file: Path | None, apps_dir: Path) -> int:
         print(f"no manifest files found in {apps_dir}", file=sys.stderr)
         return 1
     exit_code = 0
+    seen_app_ids: dict[str, Path] = {}
     for path in paths:
         try:
             manifest = load_manifest(path, os.environ)
         except ManifestError as exc:
             print(f"INVALID {exc}", file=sys.stderr)
             exit_code = 1
-        else:
-            print(f"OK {path} (app_id={manifest.app_id})")
+            continue
+        if manifest.app_id in seen_app_ids:
+            print(
+                f"INVALID {path}: app_id '{manifest.app_id}' already used by {seen_app_ids[manifest.app_id]}",
+                file=sys.stderr,
+            )
+            exit_code = 1
+            continue
+        seen_app_ids[manifest.app_id] = path
+        print(f"OK {path} (app_id={manifest.app_id})")
     return exit_code
 
 

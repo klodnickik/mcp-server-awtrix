@@ -365,7 +365,8 @@ uv run awtrix-daemon --apps-dir apps
 ```
 
 Validate a manifest without running the daemon (useful before deploying a new
-`apps/*.yaml`):
+`apps/*.yaml`; exits `0` if all checked manifests are valid and have unique
+`app_id`s, `1` otherwise):
 ```bash
 uv run awtrix-daemon validate apps/checkly.yaml
 # or validate every manifest under --apps-dir:
