@@ -23,9 +23,7 @@ def _check_mcp_server() -> bool:
 
 
 def _check_metric_daemon() -> bool:
-    heartbeat = pathlib.Path(
-        os.environ.get("DAEMON_HEARTBEAT_FILE", "/tmp/awtrix-daemon-heartbeat")
-    )
+    heartbeat = pathlib.Path(os.environ.get("DAEMON_HEARTBEAT_FILE", "/tmp/awtrix-daemon-heartbeat"))
     try:
         age = time.time() - heartbeat.stat().st_mtime
     except FileNotFoundError:

@@ -75,9 +75,7 @@ async def test_awtrix_upsert_app_posts_to_named_route(server):
 @pytest.mark.asyncio
 async def test_awtrix_upsert_app_surfaces_connection_error(server):
     async with respx.mock:
-        respx.post(f"{BASE_URL}/api/custom", params={"name": "clock"}).mock(
-            side_effect=httpx.ConnectError("refused")
-        )
+        respx.post(f"{BASE_URL}/api/custom", params={"name": "clock"}).mock(side_effect=httpx.ConnectError("refused"))
         async with Client(server) as client:
             result = await client.call_tool("awtrix_upsert_app", {"name": "clock", "text": "hi"})
         assert result.is_error
@@ -124,9 +122,7 @@ async def test_awtrix_get_device_state_returns_parsed_stats(server):
 @pytest.mark.asyncio
 async def test_awtrix_get_device_state_surfaces_malformed_response(server):
     async with respx.mock:
-        respx.get(f"{BASE_URL}/api/stats").mock(
-            return_value=httpx.Response(200, json={"unexpected": "shape"})
-        )
+        respx.get(f"{BASE_URL}/api/stats").mock(return_value=httpx.Response(200, json={"unexpected": "shape"}))
         async with Client(server) as client:
             result = await client.call_tool("awtrix_get_device_state", {})
         assert result.is_error
@@ -200,9 +196,7 @@ async def test_awtrix_test_render_invalid_color_returns_errors(server):
     # before the tool body runs. This still exercises the "no unhandled crash"
     # contract: the Client call returns a controlled error result, not an exception.
     async with Client(server, raise_exceptions=True) as client:
-        result = await client.call_tool(
-            "awtrix_test_render", {"text": "hi", "color": {"bad": "shape"}}
-        )
+        result = await client.call_tool("awtrix_test_render", {"text": "hi", "color": {"bad": "shape"}})
     assert result.is_error
     assert "color" in result.content[0].text
 

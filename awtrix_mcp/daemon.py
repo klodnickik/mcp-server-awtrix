@@ -60,15 +60,11 @@ async def fetch_source(http: httpx.AsyncClient, source: SourceConfig) -> Any:
     if source.auth is not None:
         auth = (source.auth.username, source.auth.password)
     try:
-        response = await http.request(
-            source.method, source.url, headers=source.headers, json=source.body, auth=auth
-        )
+        response = await http.request(source.method, source.url, headers=source.headers, json=source.body, auth=auth)
         response.raise_for_status()
         return _wrap_json(response.json())
     except httpx.HTTPStatusError as exc:
-        raise SourceFetchError(
-            f"{exc.response.status_code} from {exc.request.url}: {exc.response.text[:500]}"
-        ) from exc
+        raise SourceFetchError(f"{exc.response.status_code} from {exc.request.url}: {exc.response.text[:500]}") from exc
     except httpx.HTTPError as exc:
         raise SourceFetchError(str(exc)) from exc
     except ValueError as exc:
@@ -81,9 +77,7 @@ def _build_context(manifest: ManifestConfig, data: Any) -> dict:
         try:
             context[name] = evaluate_expression(expr, context)
         except ExpressionError as exc:
-            logger.warning(
-                "transform '%s' failed for manifest %s: %s", name, manifest.app_id, exc
-            )
+            logger.warning("transform '%s' failed for manifest %s: %s", name, manifest.app_id, exc)
             raise
     return context
 
@@ -106,16 +100,17 @@ async def _run_display_rules(client: AwtrixClient, manifest: ManifestConfig, con
 
 async def _run_sub_apps(client: AwtrixClient, manifest: ManifestConfig, context: dict) -> None:
     for sub in manifest.sub_apps:
-        if sub.show_if is None or evaluate_condition(sub.show_if, context):
-            segments = _render_segments(sub.text, context)
-            await client.send_app(sub.name, AppPayload(text=segments, icon=sub.icon))
-        else:
-            await client.delete_app(sub.name)
+        try:
+            if sub.show_if is None or evaluate_condition(sub.show_if, context):
+                segments = _render_segments(sub.text, context)
+                await client.send_app(sub.name, AppPayload(text=segments, icon=sub.icon))
+            else:
+                await client.delete_app(sub.name)
+        except (ExpressionError, AwtrixError) as exc:
+            logger.warning("sub-app push failed for %s (%s): %s", sub.name, manifest.app_id, exc)
 
 
-async def poll_once(
-    http: httpx.AsyncClient, client: AwtrixClient, manifest: ManifestConfig
-) -> None:
+async def poll_once(http: httpx.AsyncClient, client: AwtrixClient, manifest: ManifestConfig) -> None:
     try:
         data = await fetch_source(http, manifest.source)
     except SourceFetchError as exc:
@@ -127,13 +122,14 @@ async def poll_once(
     except ExpressionError:
         return  # _build_context already logs which transform failed
 
-    try:
-        if manifest.display:
+    if manifest.display:
+        try:
             await _run_display_rules(client, manifest, context)
-        if manifest.sub_apps:
-            await _run_sub_apps(client, manifest, context)
-    except (ExpressionError, AwtrixError) as exc:
-        logger.warning("display/sub-app push failed for %s: %s", manifest.app_id, exc)
+        except (ExpressionError, AwtrixError) as exc:
+            logger.warning("display push failed for %s: %s", manifest.app_id, exc)
+
+    if manifest.sub_apps:
+        await _run_sub_apps(client, manifest, context)
 
 
 class DaemonState:
@@ -187,7 +183,9 @@ async def _reload_apps_dir(state: DaemonState, apps_dir: Path, env: Mapping[str,
         if manifest.app_id in seen_app_ids:
             logger.warning(
                 "skipping manifest %s: app_id '%s' already used by %s",
-                path, manifest.app_id, seen_app_ids[manifest.app_id],
+                path,
+                manifest.app_id,
+                seen_app_ids[manifest.app_id],
             )
             continue
         seen_app_ids[manifest.app_id] = path
@@ -208,9 +206,7 @@ async def _reload_apps_dir(state: DaemonState, apps_dir: Path, env: Mapping[str,
                 logger.warning("failed to delete app %s for removed manifest %s: %s", name, path, exc)
 
 
-async def watch_apps_dir(
-    state: DaemonState, apps_dir: Path, env: Mapping[str, str], stop_event: asyncio.Event
-) -> None:
+async def watch_apps_dir(state: DaemonState, apps_dir: Path, env: Mapping[str, str], stop_event: asyncio.Event) -> None:
     async for _changes in watchfiles.awatch(apps_dir, stop_event=stop_event):
         await _reload_apps_dir(state, apps_dir, env)
 
@@ -222,9 +218,7 @@ async def run_daemon(apps_dir: Path, settings: AwtrixSettings) -> None:
     http = httpx.AsyncClient()
     client = AwtrixClient(base_url=settings.base_url)
     state = DaemonState(scheduler, http, client)
-    heartbeat_path = Path(
-        os.environ.get("DAEMON_HEARTBEAT_FILE", "/tmp/awtrix-daemon-heartbeat")
-    )
+    heartbeat_path = Path(os.environ.get("DAEMON_HEARTBEAT_FILE", "/tmp/awtrix-daemon-heartbeat"))
 
     try:
         await _reload_apps_dir(state, apps_dir, os.environ)
@@ -278,9 +272,7 @@ def _run_validate(file: Path | None, apps_dir: Path) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="awtrix-daemon")
-    parser.add_argument(
-        "--apps-dir", type=Path, default=Path(os.environ.get("APPS_DIR", "apps"))
-    )
+    parser.add_argument("--apps-dir", type=Path, default=Path(os.environ.get("APPS_DIR", "apps")))
     subparsers = parser.add_subparsers(dest="command")
     validate_parser = subparsers.add_parser("validate", help="Validate manifest YAML syntax/schema and exit")
     validate_parser.add_argument(

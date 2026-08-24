@@ -53,8 +53,15 @@ def build_server(settings: AwtrixSettings | None = None) -> MCPServer:
     ) -> dict[str, Any]:
         """Push an instant, high-priority notification to the AWTRIX display."""
         payload = NotificationPayload(
-            text=text, icon=icon, color=color, sound=sound, rtttl=rtttl,
-            hold=hold, duration=duration, wakeup=wakeup, stack=stack,
+            text=text,
+            icon=icon,
+            color=color,
+            sound=sound,
+            rtttl=rtttl,
+            hold=hold,
+            duration=duration,
+            wakeup=wakeup,
+            stack=stack,
         )
         await ctx.request_context.lifespan_context.client.send_notification(payload)
         return {"status": "sent", "payload": payload.model_dump(by_alias=True, exclude_none=True)}
@@ -75,8 +82,15 @@ def build_server(settings: AwtrixSettings | None = None) -> MCPServer:
     ) -> dict[str, Any]:
         """Create or update a persistent custom app in the display carousel."""
         payload = AppPayload(
-            text=text, icon=icon, duration=duration, repeat=repeat, rainbow=rainbow,
-            color=color, lifetime=lifetime, lifetime_mode=lifetime_mode, save=save,
+            text=text,
+            icon=icon,
+            duration=duration,
+            repeat=repeat,
+            rainbow=rainbow,
+            color=color,
+            lifetime=lifetime,
+            lifetime_mode=lifetime_mode,
+            save=save,
         )
         await ctx.request_context.lifespan_context.client.send_app(name, payload)
         return {"status": "upserted", "name": name, "payload": payload.model_dump(by_alias=True, exclude_none=True)}
@@ -130,8 +144,14 @@ def build_server(settings: AwtrixSettings | None = None) -> MCPServer:
         try:
             if kind == "notification":
                 payload = NotificationPayload(
-                    text=text, icon=icon, color=color, sound=sound, rtttl=rtttl,
-                    hold=hold, duration=duration, wakeup=wakeup,
+                    text=text,
+                    icon=icon,
+                    color=color,
+                    sound=sound,
+                    rtttl=rtttl,
+                    hold=hold,
+                    duration=duration,
+                    wakeup=wakeup,
                 )
             else:
                 payload = AppPayload(text=text, icon=icon, duration=duration, rainbow=rainbow, color=color)
@@ -154,9 +174,7 @@ def _transport_type(value: str) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="mcp-server-awtrix")
-    parser.add_argument(
-        "--transport", type=_transport_type, default=os.environ.get("MCP_TRANSPORT", "stdio")
-    )
+    parser.add_argument("--transport", type=_transport_type, default=os.environ.get("MCP_TRANSPORT", "stdio"))
     parser.add_argument("--host", default=os.environ.get("MCP_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=os.environ.get("MCP_PORT", "8000"))
     args = parser.parse_args()
