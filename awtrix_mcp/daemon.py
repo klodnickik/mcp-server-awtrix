@@ -160,8 +160,12 @@ def _schedule(state: DaemonState, manifest: ManifestConfig) -> None:
     )
 
 
+def _discover_manifest_paths(apps_dir: Path) -> list[Path]:
+    return sorted([*apps_dir.glob("*.yaml"), *apps_dir.glob("*.yml")])
+
+
 async def _reload_apps_dir(state: DaemonState, apps_dir: Path, env: Mapping[str, str]) -> None:
-    current_paths = sorted(list(apps_dir.glob("*.yaml")) + list(apps_dir.glob("*.yml")))
+    current_paths = _discover_manifest_paths(apps_dir)
 
     seen_app_ids: dict[str, Path] = {}
     for path in current_paths:
@@ -247,7 +251,7 @@ async def run_daemon(apps_dir: Path, settings: AwtrixSettings) -> None:
 
 
 def _run_validate(file: Path | None, apps_dir: Path) -> int:
-    paths = [file] if file else sorted(list(apps_dir.glob("*.yaml")) + list(apps_dir.glob("*.yml")))
+    paths = [file] if file else _discover_manifest_paths(apps_dir)
     if not paths:
         print(f"no manifest files found in {apps_dir}", file=sys.stderr)
         return 1
