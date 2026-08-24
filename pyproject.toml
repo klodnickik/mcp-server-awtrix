@@ -65,7 +65,10 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "respx>=0.21.0",
-    "pylint>=3.0.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "types-PyYAML>=6.0.0",
+    "pytest-cov>=6.0.0",
 ]
 
 [dependency-groups]
@@ -73,27 +76,40 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "respx>=0.21.0",
-    "pylint>=3.0.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "types-PyYAML>=6.0.0",
+    "pytest-cov>=6.0.0",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
-[tool.pylint.main]
-py-version = "3.10"
+[tool.ruff]
+line-length = 120
+target-version = "py310"
 
-[tool.pylint.messages_control]
-disable = [
-    "too-few-public-methods",        # R0903: Pydantic models / settings / AppContext
-    "too-many-arguments",            # R0913: MCP tool definitions have many parameters by design
-    "too-many-positional-arguments", # R0917: MCP tool definitions
-    "redefined-outer-name",          # W0621: Pytest fixtures
-    "missing-function-docstring",    # C0116: Test functions
-    "missing-class-docstring",       # C0115: Data models
-    "missing-module-docstring",      # C0114: Test modules
-]
+[tool.ruff.lint]
+# DTZ (naive datetime) and PYI (stub/typing style) intentionally excluded: real
+# findings exist (daemon.py naive datetime.now() in scheduler triggers, client.py
+# __aenter__ return type) but are cosmetic here and deferred, not silently missed.
+select = ["E", "F", "I", "B", "UP", "SIM", "C4", "RUF"]
 
-[tool.pylint.format]
-max-line-length = 120
+[tool.mypy]
+python_version = "3.10"
+warn_unused_ignores = true
+warn_redundant_casts = true
+files = ["awtrix_mcp", "docker"]
+
+[[tool.mypy.overrides]]
+module = ["apscheduler.*"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+branch = true
+source = ["awtrix_mcp", "docker"]
+
+[tool.coverage.report]
+exclude_lines = ["if __name__ == .__main__.:"]
 

@@ -364,11 +364,22 @@ Run the metric poller daemon locally (polls `apps/*.yaml` in the background):
 uv run awtrix-daemon --apps-dir apps
 ```
 
+Validate a manifest without running the daemon (useful before deploying a new
+`apps/*.yaml`; exits `0` if all checked manifests are valid and have unique
+`app_id`s, `1` otherwise):
+```bash
+uv run awtrix-daemon validate apps/checkly.yaml
+# or validate every manifest under --apps-dir:
+uv run awtrix-daemon validate
+```
+
 ### Running Tests
 
 ```bash
 uv sync --group dev
 uv run pytest
+# with coverage:
+uv run pytest --cov --cov-report=term-missing
 ```
 
 ### Docker & Docker Compose Setup

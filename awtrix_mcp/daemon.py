@@ -8,11 +8,13 @@ process restart.
 
 import argparse
 import asyncio
+import contextlib
 import hashlib
 import logging
 import os
 import signal
 import sys
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -95,7 +97,7 @@ async def _run_display_rules(client: AwtrixClient, manifest: ManifestConfig, con
         if evaluate_condition(rule.condition, context):
             segments = _render_segments(rule.text, context)
             payload = AppPayload(text=segments, icon=rule.icon)
-            await client.send_app(manifest.name, payload)
+            await client.send_app(manifest.name or manifest.app_id, payload)
             if rule.notify:
                 await client.send_notification(NotificationPayload(text=segments, icon=rule.icon))
             return
@@ -144,10 +146,8 @@ class DaemonState:
 
 def _schedule(state: DaemonState, manifest: ManifestConfig) -> None:
     if not manifest.enabled:
-        try:
+        with contextlib.suppress(JobLookupError):
             state.scheduler.remove_job(manifest.app_id)
-        except JobLookupError:
-            pass
         return
     state.scheduler.add_job(
         poll_once,
@@ -160,8 +160,12 @@ def _schedule(state: DaemonState, manifest: ManifestConfig) -> None:
     )
 
 
-async def _reload_apps_dir(state: DaemonState, apps_dir: Path, env: dict) -> None:
-    current_paths = sorted(list(apps_dir.glob("*.yaml")) + list(apps_dir.glob("*.yml")))
+def _discover_manifest_paths(apps_dir: Path) -> list[Path]:
+    return sorted([*apps_dir.glob("*.yaml"), *apps_dir.glob("*.yml")])
+
+
+async def _reload_apps_dir(state: DaemonState, apps_dir: Path, env: Mapping[str, str]) -> None:
+    current_paths = _discover_manifest_paths(apps_dir)
 
     seen_app_ids: dict[str, Path] = {}
     for path in current_paths:
@@ -193,11 +197,9 @@ async def _reload_apps_dir(state: DaemonState, apps_dir: Path, env: dict) -> Non
     removed_paths = set(state.manifests) - set(current_paths)
     for path in removed_paths:
         manifest, _hash = state.manifests.pop(path)
-        try:
+        with contextlib.suppress(JobLookupError):
             state.scheduler.remove_job(manifest.app_id)
-        except JobLookupError:
-            pass
-        app_names = [manifest.name] if manifest.display else []
+        app_names = [manifest.name or manifest.app_id] if manifest.display else []
         app_names += [sub.name for sub in manifest.sub_apps]
         for name in app_names:
             try:
@@ -207,7 +209,7 @@ async def _reload_apps_dir(state: DaemonState, apps_dir: Path, env: dict) -> Non
 
 
 async def watch_apps_dir(
-    state: DaemonState, apps_dir: Path, env: dict, stop_event: asyncio.Event
+    state: DaemonState, apps_dir: Path, env: Mapping[str, str], stop_event: asyncio.Event
 ) -> None:
     async for _changes in watchfiles.awatch(apps_dir, stop_event=stop_event):
         await _reload_apps_dir(state, apps_dir, env)
@@ -248,14 +250,53 @@ async def run_daemon(apps_dir: Path, settings: AwtrixSettings) -> None:
         await client.aclose()
 
 
+def _run_validate(file: Path | None, apps_dir: Path) -> int:
+    paths = [file] if file else _discover_manifest_paths(apps_dir)
+    if not paths:
+        print(f"no manifest files found in {apps_dir}", file=sys.stderr)
+        return 1
+    exit_code = 0
+    seen_app_ids: dict[str, Path] = {}
+    for path in paths:
+        try:
+            manifest = load_manifest(path, os.environ)
+        except ManifestError as exc:
+            print(f"INVALID {exc}", file=sys.stderr)
+            exit_code = 1
+            continue
+        if manifest.app_id in seen_app_ids:
+            print(
+                f"INVALID {path}: app_id '{manifest.app_id}' already used by {seen_app_ids[manifest.app_id]}",
+                file=sys.stderr,
+            )
+            exit_code = 1
+            continue
+        seen_app_ids[manifest.app_id] = path
+        print(f"OK {path} (app_id={manifest.app_id})")
+    return exit_code
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="awtrix-daemon")
     parser.add_argument(
         "--apps-dir", type=Path, default=Path(os.environ.get("APPS_DIR", "apps"))
     )
+    subparsers = parser.add_subparsers(dest="command")
+    validate_parser = subparsers.add_parser("validate", help="Validate manifest YAML syntax/schema and exit")
+    validate_parser.add_argument(
+        "file",
+        type=Path,
+        nargs="?",
+        default=None,
+        help="Specific manifest file to validate; validates all files under --apps-dir if omitted",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
+
+    if args.command == "validate":
+        sys.exit(_run_validate(args.file, args.apps_dir))
+
     print("awtrix-daemon: Metric Daemon starting...", file=sys.stderr)
 
     asyncio.run(run_daemon(args.apps_dir, AwtrixSettings()))
