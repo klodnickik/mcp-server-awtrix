@@ -211,6 +211,9 @@ Returns hardware statistics and current operational metrics.
 }
 ```
 
+> [!NOTE]
+> `charging` and `active_app` are unconfirmed on certain physical hardware revisions and are omitted by the server when `null` or unsupported by the device firmware.
+
 ### `awtrix_set_settings`
 Configures device parameters such as brightness, matrix toggle, and transition speeds.
 
@@ -220,6 +223,9 @@ Configures device parameters such as brightness, matrix toggle, and transition s
   "power": true
 }
 ```
+
+> [!NOTE]
+> `transitions` (`ATRANS`) is unconfirmed on certain hardware versions and defaults to `None`.
 
 ### `awtrix_test_render`
 Dry-run helper that parses expressions and returns the rendered payload without pushing to hardware.
@@ -467,13 +473,14 @@ In Cursor Settings $\rightarrow$ Features $\rightarrow$ MCP Servers $\rightarrow
 ## 6. Roadmap & Contributing
 
 - [x] Core MCP Tools specification and design
-- [x] Declarative YAML orchestration schema
 - [x] MCPServer (mcp v2) implementation with async HTTP client
+- [x] Declarative YAML metric poller daemon (`awtrix-daemon`) with hot-reload
+- [x] Production-grade multi-arch Docker and Compose deployment
 - [ ] Live visual web preview for matrix pixel art
 - [ ] MQTT Transport layer support (optional alternative to REST)
 - [ ] Home Assistant service discovery export
 
-Contributions are welcome! Please submit a PR or open an issue for feature discussions.
+Contributions are welcome! Please review our [Contributing Guide](CONTRIBUTING.md) and [Changelog](CHANGELOG.md) before submitting a pull request.
 
 ---
 
