@@ -664,49 +664,52 @@ def test_validate_duplicate_app_id_exits_one(tmp_path, monkeypatch, capsys):
     assert "app_id 'checkly' already used by" in captured.err
 
 
-
-
 def test_cli_apps_dir_argument_parsing_with_mock(tmp_path, monkeypatch):
     captured_apps_dir = None
+
     async def mock_run_daemon(apps_dir, settings):
         nonlocal captured_apps_dir
         captured_apps_dir = apps_dir
-        
+
     monkeypatch.setattr("awtrix_mcp.daemon.run_daemon", mock_run_daemon)
-    
+
     apps_dir = tmp_path / "custom_apps"
     monkeypatch.setattr("sys.argv", ["awtrix-daemon", "--apps-dir", str(apps_dir)])
-    
+
     main()
-    
+
     assert captured_apps_dir == apps_dir
+
 
 def test_cli_apps_dir_env_var_fallback(tmp_path, monkeypatch):
     captured_apps_dir = None
+
     async def mock_run_daemon(apps_dir, settings):
         nonlocal captured_apps_dir
         captured_apps_dir = apps_dir
-        
+
     monkeypatch.setattr("awtrix_mcp.daemon.run_daemon", mock_run_daemon)
-    
+
     apps_dir = tmp_path / "env_apps"
     monkeypatch.setenv("APPS_DIR", str(apps_dir))
     monkeypatch.setattr("sys.argv", ["awtrix-daemon"])
-    
+
     main()
-    
+
     assert captured_apps_dir == apps_dir
+
 
 def test_cli_apps_dir_default(monkeypatch):
     captured_apps_dir = None
+
     async def mock_run_daemon(apps_dir, settings):
         nonlocal captured_apps_dir
         captured_apps_dir = apps_dir
-        
+
     monkeypatch.setattr("awtrix_mcp.daemon.run_daemon", mock_run_daemon)
     monkeypatch.delenv("APPS_DIR", raising=False)
     monkeypatch.setattr("sys.argv", ["awtrix-daemon"])
-    
+
     main()
-    
+
     assert captured_apps_dir == Path("apps")
