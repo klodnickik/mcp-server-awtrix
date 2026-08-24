@@ -60,10 +60,10 @@ def test_main_dispatches_to_mcp_server_check(monkeypatch):
     assert main() == 0
 
 
-def test_main_dispatches_to_metric_daemon_check_by_default(monkeypatch):
+def test_main_dispatches_to_mcp_server_check_by_default(monkeypatch):
     monkeypatch.delenv("CONTAINER_ROLE", raising=False)
-    monkeypatch.setattr("docker.healthcheck._check_mcp_server", lambda: False)
-    monkeypatch.setattr("docker.healthcheck._check_metric_daemon", lambda: True)
+    monkeypatch.setattr("docker.healthcheck._check_mcp_server", lambda: True)
+    monkeypatch.setattr("docker.healthcheck._check_metric_daemon", lambda: False)
     assert main() == 0
 
 

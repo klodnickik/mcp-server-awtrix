@@ -36,7 +36,7 @@ def _check_metric_daemon() -> bool:
 
 
 def main() -> int:
-    role = os.environ.get("CONTAINER_ROLE", "metric-daemon")
+    role = os.environ.get("CONTAINER_ROLE", "mcp-server")
     healthy = _check_mcp_server() if role == "mcp-server" else _check_metric_daemon()
     return 0 if healthy else 1
 
