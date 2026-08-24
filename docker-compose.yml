@@ -6,12 +6,13 @@ services:
       dockerfile: Dockerfile
     container_name: awtrix-mcp-server
     restart: unless-stopped
-    command: ["python", "-m", "awtrix_mcp.server", "--transport", "sse", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["python", "-m", "awtrix_mcp.server", "--transport", "sse", "--host", "0.0.0.0", "--port", "${MCP_PORT:-8000}"]
     ports:
-      - "${MCP_PORT:-8000}:8000"
+      - "${MCP_PORT:-8000}:${MCP_PORT:-8000}"
     environment:
       - AWTRIX_BASE_URL=${AWTRIX_BASE_URL:-http://awtrix3.local}
       - APPS_DIR=/app/apps
+      - CONTAINER_ROLE=mcp-server
       - CHECKLY_API_KEY=${CHECKLY_API_KEY:-}
       - CHECKLY_ACCOUNT_ID=${CHECKLY_ACCOUNT_ID:-}
       - SAAS_METRICS_API_SECRET=${SAAS_METRICS_API_SECRET:-}
@@ -21,9 +22,10 @@ services:
     volumes:
       - ./apps:/app/apps:ro
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()\" || exit 0"]
+      test: ["CMD", "python", "docker/healthcheck.py"]
       interval: 30s
       timeout: 5s
+      start_period: 10s
       retries: 3
 
   # 2. Declarative Metric Poller Daemon (runs 24/7 in background polling apps/*.yaml)
@@ -37,6 +39,7 @@ services:
     environment:
       - AWTRIX_BASE_URL=${AWTRIX_BASE_URL:-http://awtrix3.local}
       - APPS_DIR=/app/apps
+      - CONTAINER_ROLE=metric-daemon
       - CHECKLY_API_KEY=${CHECKLY_API_KEY:-}
       - CHECKLY_ACCOUNT_ID=${CHECKLY_ACCOUNT_ID:-}
       - SAAS_METRICS_API_SECRET=${SAAS_METRICS_API_SECRET:-}
@@ -44,4 +47,10 @@ services:
       - path: .env
         required: false
     volumes:
-      - ./apps:/app/apps
+      - ./apps:/app/apps:ro
+    healthcheck:
+      test: ["CMD", "python", "docker/healthcheck.py"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
