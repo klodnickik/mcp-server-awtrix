@@ -41,7 +41,9 @@ ENV VIRTUAL_ENV=/app/.venv \
     MCP_TRANSPORT=sse \
     MCP_HOST=0.0.0.0 \
     MCP_PORT=8000 \
-    CONTAINER_ROLE=metric-daemon \
+    # The default role is the mcp-server. 
+    # docker-compose.yml overrides this for the metric-daemon service.
+    CONTAINER_ROLE=mcp-server \
     DAEMON_HEARTBEAT_FILE=/tmp/awtrix-daemon-heartbeat
 
 USER appuser
@@ -51,4 +53,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["python", "docker/healthcheck.py"]
 
-CMD ["python", "-m", "awtrix_mcp.daemon"]
+# By default, run the MCP server over SSE. 
+# docker-compose.yml overrides this for the metric-daemon service.
+CMD ["python", "-m", "awtrix_mcp.server", "--transport", "sse", "--host", "0.0.0.0", "--port", "8000"]
