@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from typing import Any
 
 import httpx
 from pydantic import ValidationError
@@ -9,6 +10,8 @@ from pydantic import ValidationError
 from .models import AppPayload, DeviceSettings, DeviceStats, NotificationPayload
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_TIMEOUT = httpx.Timeout(5.0, connect=3.0)
 
 
 class AwtrixError(Exception):
@@ -33,7 +36,7 @@ class AwtrixClient:
         self,
         base_url: str,
         *,
-        timeout: httpx.Timeout | float = httpx.Timeout(5.0, connect=3.0),
+        timeout: httpx.Timeout | float = _DEFAULT_TIMEOUT,
         limits: httpx.Limits | None = None,
         max_retries: int = 3,
         backoff_factor: float = 0.5,
@@ -59,7 +62,7 @@ class AwtrixClient:
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    async def _request(self, method: str, url: str, **kwargs: object) -> httpx.Response:
+    async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         attempt = 0
         while True:
             try:

@@ -162,7 +162,7 @@ class _Evaluator:
     def _eval_Compare(self, node: ast.Compare, scope: dict) -> Any:  # pylint: disable=invalid-name
         left = self.evaluate(node.left, scope)
         result = True
-        for op, comparator_node in zip(node.ops, node.comparators):
+        for op, comparator_node in zip(node.ops, node.comparators, strict=True):
             comparator = self.evaluate(comparator_node, scope)
             cmp_fn = _CMP_OPS.get(type(op))
             if cmp_fn is None:
@@ -186,7 +186,7 @@ class _Evaluator:
 
     def _eval_Dict(self, node: ast.Dict, scope: dict) -> Any:  # pylint: disable=invalid-name
         result = {}
-        for key_node, value_node in zip(node.keys, node.values):
+        for key_node, value_node in zip(node.keys, node.values, strict=True):
             if key_node is None:
                 raise ExpressionError("disallowed syntax: dict unpacking")
             result[self.evaluate(key_node, scope)] = self.evaluate(value_node, scope)
@@ -208,10 +208,12 @@ class _Evaluator:
 
     def _run_comprehension(self, node: ast.GeneratorExp, scope: dict) -> Any:
         generator = node.generators[0]
+        target = generator.target
+        assert isinstance(target, ast.Name)  # guaranteed by _eval_GeneratorExp's check
         iterable = self.evaluate(generator.iter, scope)
         for item in iterable:
             child_scope = dict(scope)
-            child_scope[generator.target.id] = item
+            child_scope[target.id] = item
             if all(self.evaluate(if_node, child_scope) for if_node in generator.ifs):
                 yield self.evaluate(node.elt, child_scope)
 

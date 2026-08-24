@@ -41,7 +41,7 @@ def build_server(settings: AwtrixSettings | None = None) -> MCPServer:
     @server.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=False, open_world_hint=True))
     async def awtrix_notify(
         text: str | list[TextSegment],
-        ctx: Context,
+        ctx: Context[AppContext, Any],
         icon: str | None = None,
         color: ColorValue = None,
         sound: str | None = None,
@@ -63,7 +63,7 @@ def build_server(settings: AwtrixSettings | None = None) -> MCPServer:
     async def awtrix_upsert_app(
         name: str,
         text: str | list[TextSegment],
-        ctx: Context,
+        ctx: Context[AppContext, Any],
         icon: str | None = None,
         duration: int = 5,
         repeat: int = -1,
@@ -82,20 +82,20 @@ def build_server(settings: AwtrixSettings | None = None) -> MCPServer:
         return {"status": "upserted", "name": name, "payload": payload.model_dump(by_alias=True, exclude_none=True)}
 
     @server.tool(annotations=ToolAnnotations(destructive_hint=True, idempotent_hint=True, open_world_hint=True))
-    async def awtrix_delete_app(name: str, ctx: Context) -> dict[str, Any]:
+    async def awtrix_delete_app(name: str, ctx: Context[AppContext, Any]) -> dict[str, Any]:
         """Remove a custom app from the display cycle by name."""
         await ctx.request_context.lifespan_context.client.delete_app(name)
         return {"status": "deleted", "name": name}
 
     @server.tool(annotations=ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=True))
-    async def awtrix_get_device_state(ctx: Context) -> dict[str, Any]:
+    async def awtrix_get_device_state(ctx: Context[AppContext, Any]) -> dict[str, Any]:
         """Return current AWTRIX hardware metrics: battery, lux, temperature, active app (if available)."""
         stats = await ctx.request_context.lifespan_context.client.get_stats()
         return stats.model_dump(exclude_none=True)
 
     @server.tool(annotations=ToolAnnotations(destructive_hint=False, idempotent_hint=True, open_world_hint=True))
     async def awtrix_set_settings(
-        ctx: Context,
+        ctx: Context[AppContext, Any],
         brightness: int | None = None,
         power: bool | None = None,
         transitions: bool | None = None,
@@ -126,6 +126,7 @@ def build_server(settings: AwtrixSettings | None = None) -> MCPServer:
         wakeup: bool = False,
     ) -> dict[str, Any]:
         """Validate and preview a rendered notification/app payload with no hardware side-effects."""
+        payload: NotificationPayload | AppPayload
         try:
             if kind == "notification":
                 payload = NotificationPayload(

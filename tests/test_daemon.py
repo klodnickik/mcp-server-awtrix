@@ -13,6 +13,7 @@ from awtrix_mcp.daemon import (
     DaemonState,
     _reload_apps_dir,
     fetch_source,
+    main,
     poll_once,
     run_daemon,
     watch_apps_dir,
@@ -479,3 +480,40 @@ async def test_run_daemon_touches_heartbeat_file(tmp_path, monkeypatch):
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
+
+
+def test_validate_single_valid_file_exits_zero(tmp_path, monkeypatch, capsys):
+    manifest_path = tmp_path / "checkly.yaml"
+    _write_checkly_manifest(manifest_path)
+    monkeypatch.setattr("sys.argv", ["awtrix-daemon", "validate", str(manifest_path)])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 0
+    assert "OK" in capsys.readouterr().out
+
+
+def test_validate_invalid_manifest_exits_one(tmp_path, monkeypatch, capsys):
+    manifest_path = tmp_path / "bad.yaml"
+    manifest_path.write_text("app_id: t\ninterval_seconds: 1\nsource: {type: http, url: 'http://x'}\n")
+    monkeypatch.setattr("sys.argv", ["awtrix-daemon", "validate", str(manifest_path)])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
+    assert "INVALID" in capsys.readouterr().err
+
+
+def test_validate_no_files_found_exits_one(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("sys.argv", ["awtrix-daemon", "--apps-dir", str(tmp_path), "validate"])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
+
+
+def test_validate_dir_wide_validates_all_manifests(tmp_path, monkeypatch, capsys):
+    _write_checkly_manifest(tmp_path / "checkly.yaml")
+    _write_checkly_manifest(tmp_path / "checkly2.yaml")
+    monkeypatch.setattr("sys.argv", ["awtrix-daemon", "--apps-dir", str(tmp_path), "validate"])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out.count("OK") == 2

@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv run ruff check .
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --group dev
+      - run: uv run mypy awtrix_mcp docker
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - run: uv sync --group dev
+      - run: uv run pytest --cov --cov-report=xml --cov-report=term-missing --cov-fail-under=85
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: mcp-server-awtrix:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Boot container and poll HEALTHCHECK
+        run: |
+          docker run -d --name smoke mcp-server-awtrix:ci
+          for i in $(seq 1 10); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' smoke)
+            if [ "$status" = "healthy" ]; then
+              echo "container healthy after ${i} attempt(s)"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "container never became healthy (last status: $status)"
+          docker logs smoke
+          exit 1
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv build
+      - run: uvx twine check dist/*
