@@ -22,9 +22,7 @@ class AppPayload(BaseModel):
     rainbow: bool = False
     color: ColorValue = None
     lifetime: int | None = None
-    lifetime_mode: int | None = Field(
-        default=None, validation_alias="lifetimeMode", serialization_alias="lifetimeMode"
-    )
+    lifetime_mode: int | None = Field(default=None, validation_alias="lifetimeMode", serialization_alias="lifetimeMode")
     save: bool = False
 
 
@@ -65,6 +63,4 @@ class DeviceSettings(BaseModel):
     brightness: int | None = Field(default=None, validation_alias="BRI", serialization_alias="BRI")
     power: bool | None = Field(default=None, validation_alias="MATP", serialization_alias="MATP")
     # unconfirmed on real hardware
-    transitions: bool | None = Field(
-        default=None, validation_alias="ATRANS", serialization_alias="ATRANS"
-    )
+    transitions: bool | None = Field(default=None, validation_alias="ATRANS", serialization_alias="ATRANS")

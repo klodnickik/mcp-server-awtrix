@@ -374,6 +374,83 @@ async def test_poll_once_sub_app_shows_when_show_if_true(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_poll_once_sub_app_partial_failure_continues_remaining_sub_apps(tmp_path):
+    manifest_path = tmp_path / "saas_metrics.yaml"
+    manifest_path.write_text(
+        textwrap.dedent(
+            """
+            app_id: "saas_metrics"
+            interval_seconds: 120
+            source:
+              type: "http"
+              url: "https://api.example.com/v1/admin/metrics"
+            sub_apps:
+              - name: "app_users"
+                text:
+                  - { text: "{{data.nonexistent_field}}" }
+              - name: "app_orders"
+                text:
+                  - { text: "{{data.orders}}" }
+            """
+        )
+    )
+    manifest = load_manifest(manifest_path, env={})
+
+    async with respx.mock:
+        respx.get("https://api.example.com/v1/admin/metrics").mock(return_value=httpx.Response(200, json={"orders": 5}))
+        orders_route = respx.post(f"{BASE_URL}/api/custom", params={"name": "app_orders"}).mock(
+            return_value=httpx.Response(200)
+        )
+
+        async with httpx.AsyncClient() as http, AwtrixClient(base_url=BASE_URL) as client:
+            await poll_once(http, client, manifest)
+
+        assert orders_route.called
+        assert b"5" in orders_route.calls.last.request.content
+
+
+@pytest.mark.asyncio
+async def test_poll_once_sub_app_device_error_continues_remaining(tmp_path):
+    manifest_path = tmp_path / "saas_metrics.yaml"
+    manifest_path.write_text(
+        textwrap.dedent(
+            """
+            app_id: "saas_metrics"
+            interval_seconds: 120
+            source:
+              type: "http"
+              url: "https://api.example.com/v1/admin/metrics"
+            sub_apps:
+              - name: "app_users"
+                text:
+                  - { text: "{{data.users}}" }
+              - name: "app_orders"
+                text:
+                  - { text: "{{data.orders}}" }
+            """
+        )
+    )
+    manifest = load_manifest(manifest_path, env={})
+
+    async with respx.mock:
+        respx.get("https://api.example.com/v1/admin/metrics").mock(
+            return_value=httpx.Response(200, json={"users": 10, "orders": 5})
+        )
+        users_route = respx.post(f"{BASE_URL}/api/custom", params={"name": "app_users"}).mock(
+            return_value=httpx.Response(500)
+        )
+        orders_route = respx.post(f"{BASE_URL}/api/custom", params={"name": "app_orders"}).mock(
+            return_value=httpx.Response(200)
+        )
+
+        async with httpx.AsyncClient() as http, AwtrixClient(base_url=BASE_URL) as client:
+            await poll_once(http, client, manifest)
+
+        assert users_route.called
+        assert orders_route.called
+
+
+@pytest.mark.asyncio
 async def test_poll_once_invalid_json_response_does_not_raise(tmp_path):
     manifest_path = tmp_path / "checkly.yaml"
     _write_checkly_manifest(manifest_path)
@@ -395,9 +472,7 @@ async def test_poll_once_device_error_during_display_push_does_not_raise(tmp_pat
         respx.get(SOURCE_URL).mock(
             return_value=httpx.Response(200, json=[{"hasFailures": True}, {"hasFailures": False}])
         )
-        respx.post(f"{BASE_URL}/api/custom", params={"name": "checkly_status"}).mock(
-            return_value=httpx.Response(500)
-        )
+        respx.post(f"{BASE_URL}/api/custom", params={"name": "checkly_status"}).mock(return_value=httpx.Response(500))
 
         async with httpx.AsyncClient() as http, AwtrixClient(base_url=BASE_URL) as client:
             await poll_once(http, client, manifest)  # must not raise despite AwtrixResponseError
@@ -480,6 +555,43 @@ async def test_run_daemon_touches_heartbeat_file(tmp_path, monkeypatch):
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
+
+
+@pytest.mark.asyncio
+async def test_poll_once_display_failure_does_not_block_sub_apps(tmp_path):
+    manifest_path = tmp_path / "mixed.yaml"
+    manifest_path.write_text(
+        textwrap.dedent(
+            """
+            app_id: "mixed"
+            interval_seconds: 120
+            source:
+              type: "http"
+              url: "https://api.example.com/v1/admin/metrics"
+            display:
+              - condition: "default"
+                text:
+                  - { text: "{{data.nonexistent_field}}" }
+            sub_apps:
+              - name: "app_orders"
+                text:
+                  - { text: "{{data.orders}}" }
+            """
+        )
+    )
+    manifest = load_manifest(manifest_path, env={})
+
+    async with respx.mock:
+        respx.get("https://api.example.com/v1/admin/metrics").mock(return_value=httpx.Response(200, json={"orders": 5}))
+        orders_route = respx.post(f"{BASE_URL}/api/custom", params={"name": "app_orders"}).mock(
+            return_value=httpx.Response(200)
+        )
+
+        async with httpx.AsyncClient() as http, AwtrixClient(base_url=BASE_URL) as client:
+            await poll_once(http, client, manifest)
+
+        assert orders_route.called
+        assert b"5" in orders_route.calls.last.request.content
 
 
 def test_validate_single_valid_file_exits_zero(tmp_path, monkeypatch, capsys):

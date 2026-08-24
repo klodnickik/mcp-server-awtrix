@@ -71,26 +71,18 @@ class AwtrixClient:
                 return response
             except httpx.TimeoutException as exc:
                 if attempt >= self._max_retries - 1:
-                    logger.warning(
-                        "%s %s timed out after %d attempt(s): %s", method, url, attempt + 1, exc
-                    )
+                    logger.warning("%s %s timed out after %d attempt(s): %s", method, url, attempt + 1, exc)
                     raise AwtrixTimeoutError(str(exc)) from exc
-                logger.debug(
-                    "%s %s timed out (attempt %d), retrying: %s", method, url, attempt + 1, exc
-                )
+                logger.debug("%s %s timed out (attempt %d), retrying: %s", method, url, attempt + 1, exc)
             except httpx.HTTPStatusError as exc:
                 raise AwtrixResponseError(
                     f"{exc.response.status_code} from {exc.request.url}: {exc.response.text}"
                 ) from exc
             except httpx.RequestError as exc:
                 if attempt >= self._max_retries - 1:
-                    logger.warning(
-                        "%s %s failed after %d attempt(s): %s", method, url, attempt + 1, exc
-                    )
+                    logger.warning("%s %s failed after %d attempt(s): %s", method, url, attempt + 1, exc)
                     raise AwtrixConnectionError(str(exc)) from exc
-                logger.debug(
-                    "%s %s failed (attempt %d), retrying: %s", method, url, attempt + 1, exc
-                )
+                logger.debug("%s %s failed (attempt %d), retrying: %s", method, url, attempt + 1, exc)
 
             await asyncio.sleep(self._backoff_factor * 2**attempt)
             attempt += 1
@@ -107,9 +99,7 @@ class AwtrixClient:
         await self._request("POST", "/api/custom", params={"name": name}, json={})
 
     async def send_notification(self, payload: NotificationPayload) -> None:
-        await self._request(
-            "POST", "/api/notify", json=payload.model_dump(by_alias=True, exclude_none=True)
-        )
+        await self._request("POST", "/api/notify", json=payload.model_dump(by_alias=True, exclude_none=True))
 
     async def get_stats(self) -> DeviceStats:
         response = await self._request("GET", "/api/stats")
@@ -120,14 +110,10 @@ class AwtrixClient:
             raise AwtrixResponseError(f"Malformed response from /api/stats: {exc}") from exc
 
     async def set_settings(self, settings: DeviceSettings) -> None:
-        await self._request(
-            "POST", "/api/settings", json=settings.model_dump(by_alias=True, exclude_none=True)
-        )
+        await self._request("POST", "/api/settings", json=settings.model_dump(by_alias=True, exclude_none=True))
 
     async def set_power(self, state: bool) -> None:
         await self._request("POST", "/api/power", json={"power": state})
 
     async def send_rtttl(self, rtttl: str) -> None:
-        await self._request(
-            "POST", "/api/rtttl", content=rtttl, headers={"Content-Type": "text/plain"}
-        )
+        await self._request("POST", "/api/rtttl", content=rtttl, headers={"Content-Type": "text/plain"})

@@ -13,9 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AwtrixSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_prefix="AWTRIX_", env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="AWTRIX_", env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     base_url: str = "http://awtrix3.local"
 
@@ -33,6 +31,7 @@ _SECRET_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 def resolve_secrets(value: Any, env: Mapping[str, str]) -> Any:
     if isinstance(value, str):
+
         def _substitute(match: re.Match) -> str:
             name = match.group(1)
             try:
