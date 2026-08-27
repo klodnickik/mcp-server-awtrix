@@ -29,8 +29,10 @@ env/
 venv/
 ENV/
 
-# Logs
+# Logs & Coverage
 *.log
+.coverage
+htmlcov/
 
 # Private local scripts
 ulanzi_*.py
