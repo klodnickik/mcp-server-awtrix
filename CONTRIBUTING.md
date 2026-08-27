@@ -46,11 +46,14 @@ uv run mypy awtrix_mcp docker
 # Start the MCP Server on STDIO
 uv run mcp-server-awtrix
 
-# Validate app manifests
-uv run awtrix-daemon validate apps/
+# Validate app manifests (all files under --apps-dir)
+uv run awtrix-daemon validate
+
+# Validate a single manifest file
+uv run awtrix-daemon validate apps/checkly.yaml
 
 # Run daemon locally
-uv run awtrix-daemon apps/
+uv run awtrix-daemon --apps-dir apps
 ```
 
 ## Pull Request & Commit Standards

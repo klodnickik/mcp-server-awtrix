@@ -26,7 +26,6 @@ It bridges conversational and autonomous AI agents with physical desktop display
 2. [System Architecture & Design](#2-system-architecture--design)
    - [High-Level Architecture](#high-level-architecture)
    - [Component Breakdown](#component-breakdown)
-   - [Data Flow](#data-flow)
 3. [MCP Tools Specification](#3-mcp-tools-specification)
 4. [Declarative App Engine (YAML Schema)](#4-declarative-app-engine-yaml-schema)
    - [Example 1: CI/CD & Service Health (Checkly)](#example-1-service-health-checkly)
@@ -200,14 +199,12 @@ Returns hardware statistics and current operational metrics.
 *Response:*
 ```json
 {
-  "online": true,
-  "battery": 88,
+  "bat": 88,
   "charging": true,
-  "lux": 140,
-  "temp": 24,
-  "ram_free": 128440,
-  "active_app": "app_users",
-  "brightness": 120
+  "lux": "140",
+  "ram": 128440,
+  "temp": "24",
+  "active_app": "app_users"
 }
 ```
 
@@ -463,7 +460,7 @@ Add to `claude_desktop_config.json`:
 ```
 
 #### 3. Cursor
-In Cursor Settings $\rightarrow$ Features $\rightarrow$ MCP Servers $\rightarrow$ Add Server:
+In Cursor Settings → Features → MCP Servers → Add Server:
 - **Name**: `awtrix`
 - **Type**: `command`
 - **Command**: `uv --directory /path/to/mcp-server-awtrix run mcp-server-awtrix`
